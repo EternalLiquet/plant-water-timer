@@ -11,7 +11,7 @@ export default function SignInBox(props) {
             minHeight="100%"
             bgcolor="rgb(18, 18, 18, 0.5)"
         >
-            {props.user ? <TextField/> : <SignIn auth={props.auth} firebase={props.firebase}/>}
+            <SignIn auth={props.auth} firebase={props.firebase}/>
         </Box>
     )
 }
