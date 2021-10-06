@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppBar, Box, Button, Container, createTheme, CssBaseline, Grid, makeStyles, TextField, Toolbar, Typography } from '@material-ui/core';
+import { AppBar, Box, Container, createTheme, CssBaseline, Grid, makeStyles, Toolbar, Typography } from '@material-ui/core';
 import { ThemeProvider } from '@material-ui/styles';
 
 import firebase from 'firebase/compat/app';
@@ -9,8 +9,6 @@ import 'firebase/compat/auth';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
 import SignIn from './components/SignIn';
-import SignInBox from './components/SignInBox';
-import SignOut from './components/SignOut';
 import AccountSignedIn from './components/AccountSignedIn';
 
 const darkTheme = createTheme({
