@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppBar, Box, Container, createTheme, CssBaseline, Grid, makeStyles, Toolbar, Typography } from '@material-ui/core';
+import { AppBar, Box, Button, createTheme, CssBaseline, Grid, makeStyles, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Toolbar, Typography } from '@material-ui/core';
 import { ThemeProvider } from '@material-ui/styles';
 
 import firebase from 'firebase/compat/app';
@@ -50,6 +50,52 @@ function App() {
   const plantsRef = firestore.collection("plants");
   const query = plantsRef.where("uid", "==", user ? auth.currentUser.uid : '')
   const [plants] = useCollectionData(query, { idField: 'id' });
+  var content;
+
+  const handleWater = (plant) => {
+    console.log(plant)
+    var newDateForWatering = new Date(new Date().getTime() + (plant.wateringGap * (1000 * 3600 * 24)));
+    plantsRef.doc(plant.id).update({ lastWatering: new Date(), nextWatering: newDateForWatering });
+  }
+
+  if(user) {
+    content = <TableContainer component={Paper}>
+    <Table sx={{ minWidth: 650}} aria-label="plant table">
+      <TableHead>
+        <TableRow>
+          <TableCell>Plant Name</TableCell>
+          <TableCell>Last Watered Date</TableCell>
+          <TableCell>Next Watering Date</TableCell>
+          <TableCell></TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {
+          plants?.map(plant => (
+            <TableRow key={plant.id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+              <TableCell scope="plant">{plant.plantName}</TableCell>
+              <TableCell>{plant.lastWatering.toDate().toString()}</TableCell>
+              <TableCell>{plant.nextWatering.toDate().toString()}</TableCell>
+              <TableCell>
+                <Button variant="contained" onClick={() => handleWater(plant)}>
+                  Water This Plant
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))
+        }
+        <TableRow style={{ padding: "5px", alignItems: "center"}}>
+          <TableCell />
+          <TableCell />
+          <TableCell />
+          <TableCell>
+            <Button variant="contained">Add New Plant</Button>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
+  </TableContainer>
+  }
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -68,12 +114,7 @@ function App() {
         <Grid xs={12} className={classes.verticalMarginGrid}/>
         <Grid xs={2} className={classes.contentGrid}/>
         <Grid xs={8} className={classes.contentGrid}>
-          {plants && plants.map(plant =>
-            <Container key={plant.id}>
-              <Typography>Plant Name: {plant.plantName}</Typography>
-              <Typography>Last Watered Date: {plant.lastWatering.toDate().toString()}</Typography>
-              <Typography>Next Watering Date: {plant.nextWatering.toDate().toString()}</Typography>
-            </Container>)}
+          {content}
         </Grid>
         <Grid xs={2} className={classes.contentGrid}/>
         <Grid xs={12} className={classes.verticalMarginGrid}/>
