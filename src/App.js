@@ -73,7 +73,6 @@ function App() {
   }
 
   const onSubmit = (form) => {
-    alert(JSON.stringify(form));
     plantsRef.add({
       plantName: form.plantName,
       wateringGap: form.daysBetweenWater,
@@ -94,7 +93,7 @@ function App() {
   };
 
   if(user) {
-    content = <TableContainer component={Paper}>
+    content = <TableContainer component={Paper} style={{ marginBottom: "40px" }}>
     <Table sx={{ minWidth: 650}} aria-label="plant table">
       <TableHead>
         <TableRow>
@@ -106,8 +105,12 @@ function App() {
       </TableHead>
       <TableBody>
         {
-          plants?.sort((a, b) => a.nextWatering - b.nextWatering).map(plant => (
-            <TableRow key={plant.id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+          plants?.sort((a, b) => a.nextWatering - b.nextWatering).sort((a, b) => { if(!a.nextWatering) return a.nextWatering }).map(plant => (
+            <TableRow 
+              key={plant.id} 
+              sx={{ '&:last-child td, &:last-child th': { border: 0 } }} 
+              style={{ backgroundColor: !plant.nextWatering ? 'rgb(255, 214, 0, 0.4)' : new Date().getTime() > plant.nextWatering.toDate().getTime() ? 'rgb(255, 0, 0, 0.5)' : ''}}
+            >
               <TableCell scope="plant">{plant.plantName}</TableCell>
               <TableCell>{plant?.lastWatering ? plant.lastWatering.toDate().toString() : "This plant has not been watered yet"}</TableCell>
               <TableCell>{plant?.nextWatering ? plant.nextWatering.toDate().toString() : "This plant has not been watered yet"}</TableCell>
@@ -190,7 +193,7 @@ function App() {
       <CssBaseline />
       <div class="page-bg" />
       <Box sx={{ flexGrow: 1 }}>
-        <AppBar position="static" style={{ background: "#127A42"}}>
+        <AppBar position="static" style={{ background: "#127A42", marginBottom: "60px"}}>
           <Toolbar>
             <Typography>Plant Water Reminder</Typography>
             <div style={{ flexGrow: 1}}/>
