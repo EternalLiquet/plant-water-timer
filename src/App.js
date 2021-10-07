@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppBar, Box, Button, createTheme, CssBaseline, FormControl, Grid, makeStyles, Modal, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Toolbar, Typography } from '@material-ui/core';
 import { ThemeProvider } from '@material-ui/styles';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
@@ -60,10 +60,10 @@ function App() {
   const classes = useStyles();
   const [user] = useAuthState(auth);
   const plantsRef = firestore.collection("plants");
-  const query = plantsRef.where("uid", "==", user ? auth.currentUser.uid : '')
+  const query = plantsRef.where("uid", "==", user ? auth.currentUser.uid : '');
   const [plants] = useCollectionData(query, { idField: 'id' });
   const [openAddPlant, setOpenAddPlant] = useState(false);
-  const { register, handleSubmit } = useForm();
+  const { handleSubmit, control } = useForm();
   var content;
 
   const handleWater = (plant) => {
@@ -74,6 +74,11 @@ function App() {
 
   const onSubmit = (form) => {
     alert(JSON.stringify(form));
+    plantsRef.add({
+      plantName: form.plantName,
+      wateringGap: form.daysBetweenWater,
+      uid: auth.currentUser.uid
+    });
   }
 
   const modalStyle = {
@@ -101,11 +106,11 @@ function App() {
       </TableHead>
       <TableBody>
         {
-          plants?.map(plant => (
+          plants?.sort((a, b) => a.nextWatering - b.nextWatering).map(plant => (
             <TableRow key={plant.id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
               <TableCell scope="plant">{plant.plantName}</TableCell>
-              <TableCell>{plant.lastWatering.toDate().toString()}</TableCell>
-              <TableCell>{plant.nextWatering.toDate().toString()}</TableCell>
+              <TableCell>{plant?.lastWatering ? plant.lastWatering.toDate().toString() : "This plant has not been watered yet"}</TableCell>
+              <TableCell>{plant?.nextWatering ? plant.nextWatering.toDate().toString() : "This plant has not been watered yet"}</TableCell>
               <TableCell>
                 <Button variant="contained" onClick={() => handleWater(plant)}>
                   Water This Plant
@@ -125,24 +130,51 @@ function App() {
               onClose={() => setOpenAddPlant(false)}
             >
               <Box sx={modalStyle}>
-              <form onSubmit={handleSubmit(onSubmit)}>
+                  <form onSubmit={handleSubmit(onSubmit)}>
+                    
                 <FormControl>
-                  <TextField
-                    name="plantName"
-                    label="Plant Name"
-                    variant="outlined"
-                    inputRef={register()}
-                  />
-                  <TextField
-                    name="daysToWater"
-                    label="Days Between Watering"
-                    variant="outlined"
-                    type="number"
-                    inputRef={register()}
-                  />
-                  <Button variant="contained">Add Plant</Button>
+                  <Controller
+                      name="plantName"
+                      control={control}
+                      defaultValue=""
+                      render={({ field: { onChange, value }}) => (
+                        <TextField
+                          required
+                          label="Plant Name"
+                          variant="outlined"
+                          value={value}
+                          onChange={onChange}
+                          margin="normal"
+                        />
+                      )}
+                      />
+                      <Controller
+                      name="daysBetweenWater"
+                      control={control}
+                      defaultValue=""
+                      render={({ field: { onChange, value } }) => (
+                        <TextField
+                          required
+                          label="Days Between Water"
+                          type="number"
+                          variant="outlined"
+                          value={value}
+                          onChange={onChange}
+                          margin="normal"
+                          InputProps={{
+                            inputProps: {
+                              min: 1
+                            }
+                          }}
+                        />
+                      )}
+                    />
+                      <Button
+                        variant="contained"
+                        type="submit"
+                        >Add Plant
+                      </Button>
                 </FormControl>
-                
               </form>
               </Box>
             </Modal>
