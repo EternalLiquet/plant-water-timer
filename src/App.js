@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { AppBar, Box, Button, createTheme, CssBaseline, FormControl, Grid, IconButton, makeStyles, Modal, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Toolbar, Typography } from '@material-ui/core';
-import { ThemeProvider } from '@material-ui/styles';
+import { AppBar, Box, Button, createTheme, CssBaseline, FormControl, Grid, Modal, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, ThemeProvider, Toolbar, Typography } from '@mui/material';
+import { makeStyles } from '@mui/styles'
 import { useForm, Controller } from 'react-hook-form';
 
 import firebase from 'firebase/compat/app';
@@ -12,14 +12,6 @@ import { useCollectionData } from 'react-firebase-hooks/firestore';
 import SignIn from './components/SignIn';
 import AccountSignedIn from './components/AccountSignedIn';
 import PlantOptions from './components/PlantOptions';
-import { MoreVert } from '@mui/icons-material';
-import { Menu, MenuItem } from '@mui/material';
-
-const darkTheme = createTheme({
-  palette: {
-    type: 'dark',
-  }
-});
 
 firebase.initializeApp({
   apiKey: "AIzaSyAtQtSFrmXIylCOktouGw2YsnKwGgv6U3k",
@@ -58,7 +50,7 @@ const useStyles = makeStyles(() => ({
 
 function plantSorter() {
   return function (a, b) { 
-    if (a.nextWatering == b.nextWatering)
+    if (a.nextWatering === b.nextWatering)
       return 0;
     else if (!a.nextWatering) {
       return -1;
@@ -80,12 +72,21 @@ function App() {
   const query = plantsRef.where("uid", "==", user ? auth.currentUser.uid : '');
   const [plants] = useCollectionData(query, { idField: 'id' });
   const [openAddPlant, setOpenAddPlant] = useState(false);
-  const { handleSubmit, control } = useForm();
+  const { handleSubmit, control, reset } = useForm();
 
   var content;
 
+  const darkTheme = React.useMemo(
+  () => 
+    createTheme({
+      palette: {
+        mode: 'dark'
+      },
+    }),
+  []
+);
+
   const handleWater = (plant) => {
-    console.log(plant)
     var newDateForWatering = new Date(new Date().getTime() + (plant.wateringGap * (1000 * 3600 * 24)));
     plantsRef.doc(plant.id).update({ lastWatering: new Date(), nextWatering: newDateForWatering });
   }
@@ -96,6 +97,8 @@ function App() {
       wateringGap: form.daysBetweenWater,
       uid: auth.currentUser.uid
     });
+    setOpenAddPlant(false);
+    reset();
   }
 
   const modalStyle = {
