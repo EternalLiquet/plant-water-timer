@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppBar, Box, Button, createTheme, CssBaseline, FormControl, Grid, makeStyles, Modal, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Toolbar, Typography } from '@material-ui/core';
+import { AppBar, Box, Button, createTheme, CssBaseline, FormControl, Grid, IconButton, makeStyles, Modal, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Toolbar, Typography } from '@material-ui/core';
 import { ThemeProvider } from '@material-ui/styles';
 import { useForm, Controller } from 'react-hook-form';
 
@@ -11,6 +11,9 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
 import SignIn from './components/SignIn';
 import AccountSignedIn from './components/AccountSignedIn';
+import PlantOptions from './components/PlantOptions';
+import { MoreVert } from '@mui/icons-material';
+import { Menu, MenuItem } from '@mui/material';
 
 const darkTheme = createTheme({
   palette: {
@@ -53,6 +56,20 @@ const useStyles = makeStyles(() => ({
   }
 }));
 
+function plantSorter() {
+  return function (a, b) { 
+    if (a.nextWatering == b.nextWatering)
+      return 0;
+    else if (!a.nextWatering) {
+      return -1;
+    } else if (!b.nextWatering) {
+      return 1;
+    } else { 
+      return a.nextWatering - b.nextWatering
+    }
+  }
+}
+
 const auth = firebase.auth();
 const firestore = firebase.firestore();
 
@@ -64,6 +81,7 @@ function App() {
   const [plants] = useCollectionData(query, { idField: 'id' });
   const [openAddPlant, setOpenAddPlant] = useState(false);
   const { handleSubmit, control } = useForm();
+
   var content;
 
   const handleWater = (plant) => {
@@ -101,11 +119,12 @@ function App() {
           <TableCell>Last Watered Date</TableCell>
           <TableCell>Next Watering Date</TableCell>
           <TableCell></TableCell>
+          <TableCell></TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
         {
-          plants?.sort((a, b) => a.nextWatering - b.nextWatering).sort((a, b) => { if(!a.nextWatering) return a.nextWatering }).map(plant => (
+          plants?.sort(plantSorter()).map(plant => (
             <TableRow 
               key={plant.id} 
               sx={{ '&:last-child td, &:last-child th': { border: 0 } }} 
@@ -118,6 +137,9 @@ function App() {
                 <Button variant="contained" onClick={() => handleWater(plant)}>
                   Water This Plant
                 </Button>
+              </TableCell>
+              <TableCell>
+                <PlantOptions plant={plant} plantsRef={plantsRef} />
               </TableCell>
             </TableRow>
           ))
@@ -181,7 +203,8 @@ function App() {
               </form>
               </Box>
             </Modal>
-          </TableCell>
+            </TableCell>
+            <TableCell/>
         </TableRow>
       </TableBody>
     </Table>
