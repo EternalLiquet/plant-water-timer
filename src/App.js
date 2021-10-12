@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { AppBar, Box, Button, createTheme, CssBaseline, FormControl, Grid, Modal, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, ThemeProvider, Toolbar, Typography } from '@mui/material';
-import { makeStyles } from '@mui/styles'
+import { AppBar, Box, Button, createTheme, CssBaseline, FormControl, Grid, makeStyles, Modal, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, ThemeProvider, Toolbar, Typography } from '@material-ui/core';
 import { useForm, Controller } from 'react-hook-form';
 
 import firebase from 'firebase/compat/app';
@@ -20,6 +19,12 @@ firebase.initializeApp({
   storageBucket: "plant0.appspot.com",
   messagingSenderId: "438322523913",
   appId: "1:438322523913:web:8258be948ab81d86616dd8"
+});
+
+const darkTheme = createTheme({
+  palette: {
+    type: 'dark',
+  }
 });
 
 const useStyles = makeStyles(() => ({
@@ -75,16 +80,6 @@ function App() {
   const { handleSubmit, control, reset } = useForm();
 
   var content;
-
-  const darkTheme = React.useMemo(
-  () => 
-    createTheme({
-      palette: {
-        mode: 'dark'
-      },
-    }),
-  []
-);
 
   const handleWater = (plant) => {
     var newDateForWatering = new Date(new Date().getTime() + (plant.wateringGap * (1000 * 3600 * 24)));

@@ -1,5 +1,5 @@
 import React from "react";
-import { Avatar, Typography } from "@mui/material";
+import { Avatar, Typography } from "@material-ui/core";
 import SignOut from "./SignOut";
 
 export default function AccountSignedIn(props) {

@@ -1,5 +1,5 @@
-import { MoreVert } from "@mui/icons-material";
-import { IconButton, Menu, MenuItem } from "@mui/material";
+import { MoreVert } from "@material-ui/icons";
+import { IconButton, Menu, MenuItem } from "@material-ui/core";
 import React from "react";
 
 export default function PlantOptions(props) {
