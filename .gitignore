@@ -6,6 +6,39 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Monorepo build output
+apps/api/build/
+apps/api/target/
+apps/api/.gradle/
+apps/api/out/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/web-build/
+packages/*/dist/
+
+# Local infrastructure and generated assets
+.env
+.env.*
+!.env.example
+uploads/
+object-storage/
+minio-data/
+postgres-data/
+generated/
+*.generated.*
+.firebase/
+
+# Mobile local files
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+
+# IDE/runtime
+.idea/
+.vscode/
+.codex-gitconfig
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
