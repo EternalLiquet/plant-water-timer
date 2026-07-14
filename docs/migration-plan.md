@@ -2,13 +2,12 @@
 
 ## Current State
 
-The repository started as a small Create React App hosted through Firebase. Most behavior lives in `src/App.js`, including Firebase initialization, Google sign-in, Firestore reads and writes, plant creation, watering updates, and table rendering.
+The repository started as a small Create React App hosted through Firebase. Most behavior lived in `src/App.js`, including Firebase initialization, Google sign-in, Firestore reads and writes, plant creation, watering updates, and table rendering.
 
-The useful concepts to preserve are:
+Useful concepts from the old app were:
 
 - A user-owned plant list.
 - Basic plant create, edit, delete, and water actions.
-- The existing background image asset if it still fits the future product.
 
 The parts to replace are:
 
@@ -19,9 +18,9 @@ The parts to replace are:
 
 ## Decision
 
-The legacy app has been moved to `legacy/react-firebase-app` and left intact for reference. New groundwork starts in `apps/api` as a minimal Gradle-based Spring Boot service targeting Java 21.
+The legacy React/Firebase app has been removed instead of retained in-tree because it exposed Firebase client configuration and is unlikely to be reused. New groundwork starts in `apps/api` as a minimal Gradle-based Spring Boot service targeting Java 21.
 
-This keeps the first PR intentionally small: it establishes the backend application shape without prematurely building the plant-care vertical slice.
+This keeps the baseline intentionally small: it establishes the backend application shape without prematurely building the plant-care vertical slice.
 
 ## Next Steps
 

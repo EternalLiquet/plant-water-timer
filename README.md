@@ -5,7 +5,6 @@ This repository is being modernized from a legacy React/Firebase watering timer 
 ## Structure
 
 - `apps/api` - minimal Spring Boot API groundwork.
-- `legacy/react-firebase-app` - preserved original Create React App/Firebase app.
 - `docs/migration-plan.md` - current migration notes and next steps.
 
 ## Run the API
