@@ -8,9 +8,11 @@ lerna-debug.log*
 
 # Monorepo build output
 apps/api/build/
+apps/api/bin/
 apps/api/target/
 apps/api/.gradle/
 apps/api/out/
+apps/api/data/
 apps/mobile/.expo/
 apps/mobile/dist/
 apps/mobile/web-build/
