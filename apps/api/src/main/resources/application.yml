@@ -7,9 +7,6 @@ spring:
     password: ${DATABASE_PASSWORD:}
   flyway:
     enabled: true
-  jackson:
-    mapper:
-      accept-case-insensitive-enums: true
 
 app:
   version: ${APP_VERSION:0.1.0-SNAPSHOT}

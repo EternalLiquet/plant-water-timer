@@ -47,6 +47,11 @@ Then open `http://localhost:8080/api/status` or
 Until authentication is implemented, requests use `X-Owner-Id` as temporary owner context. This
 header provides query scoping but is not proof of identity.
 
+Enum JSON values are a stable, case-sensitive API contract. Use `indoor` or `outdoor` for the
+environment; `plastic`, `ceramic`, `terracotta`, or `unknown` for pot material; `yes`, `no`, or
+`unknown` for drainage; `low`, `medium_indirect`, `bright_indirect`, `direct`, or `unknown` for
+light; and `wet`, `moist`, or `dry` for soil state. Responses use the same values.
+
 Create a plant:
 
 ```sh
@@ -76,6 +81,9 @@ curl -X POST http://localhost:8080/api/plants/PLANT_ID/observations \
     "observedAt": "2026-07-17T12:00:00Z"
   }'
 ```
+
+Observation timestamps may be historical or up to five minutes ahead of server time to allow for
+normal client clock skew. Later timestamps receive `400 Bad Request` and create no care history.
 
 Retrieve recommendation history:
 

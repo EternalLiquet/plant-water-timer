@@ -2,6 +2,7 @@ package com.eternalliquet.plantcare.plants;
 
 import com.eternalliquet.plantcare.inspection.InspectionRecommendationPolicy;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -11,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PlantCareService {
+
+  private static final Duration ALLOWED_OBSERVATION_CLOCK_SKEW = Duration.ofMinutes(5);
 
   private final PlantJdbcRepository repository;
   private final InspectionRecommendationPolicy recommendationPolicy;
@@ -56,6 +59,7 @@ public class PlantCareService {
     Objects.requireNonNull(command, "command is required");
     var plant = ownedPlant(ownerId, plantId);
     var createdAt = Instant.now(clock);
+    validateObservationTimestamp(command.observedAt(), createdAt);
     var observation =
         new SoilObservation(
             identifiers.next(),
@@ -100,5 +104,12 @@ public class PlantCareService {
 
   private PlantProfile ownedPlant(UUID ownerId, UUID plantId) {
     return repository.findOwned(ownerId, plantId).orElseThrow(() -> new PlantNotFoundException(plantId));
+  }
+
+  private static void validateObservationTimestamp(Instant observedAt, Instant serverNow) {
+    if (observedAt.isAfter(serverNow.plus(ALLOWED_OBSERVATION_CLOCK_SKEW))) {
+      throw new IllegalArgumentException(
+          "Observation timestamp cannot be more than five minutes in the future");
+    }
   }
 }

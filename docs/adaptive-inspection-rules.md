@@ -12,6 +12,11 @@ a safe, deterministic window for the next inspection. It never decides that the 
 - Observation timestamp: an explicit UTC instant used as the date-calculation anchor.
 - Creation timestamp: an explicit UTC instant stored with the recommendation.
 
+At the application boundary, the observation timestamp must be no later than the injected server
+clock plus a five-minute client clock-skew allowance. The exact limit is valid, as are timestamps
+within the allowance and all historical timestamps. A later timestamp is rejected before the
+observation or recommendation is persisted.
+
 The plant profile also stores environment, pot material, drainage, light level, and an optional
 known name. Version 1 does not yet use those fields to adjust dates.
 

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.eternalliquet.plantcare.inspection.InspectionReasonCode;
 import com.eternalliquet.plantcare.inspection.SoilState;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
@@ -98,7 +99,7 @@ class PlantCareServiceIntegrationTests {
     plantCareService.recordObservation(
         OWNER_ID,
         PLANT_ID,
-        new RecordSoilObservationCommand(SoilState.DRY, "Pot feels light", OBSERVED_AT.plusSeconds(3600)));
+        new RecordSoilObservationCommand(SoilState.DRY, "Pot feels light", OBSERVED_AT.plusSeconds(60)));
 
     assertThat(rowCount("soil_observations")).isEqualTo(2);
   }
@@ -140,7 +141,7 @@ class PlantCareServiceIntegrationTests {
                     OWNER_ID,
                     PLANT_ID,
                     new RecordSoilObservationCommand(
-                        SoilState.WET, null, OBSERVED_AT.plusSeconds(3600))))
+                        SoilState.WET, null, OBSERVED_AT.plusSeconds(60))))
         .isInstanceOf(DataIntegrityViolationException.class);
     assertThat(rowCount("soil_observations")).isOne();
     assertThat(rowCount("inspection_recommendations")).isOne();
@@ -170,6 +171,69 @@ class PlantCareServiceIntegrationTests {
     assertThatThrownBy(() -> plantCareService.recommendationHistory(OTHER_OWNER_ID, PLANT_ID))
         .isInstanceOf(PlantNotFoundException.class);
     assertThat(plantCareService.recommendationHistory(OWNER_ID, PLANT_ID)).hasSize(1);
+  }
+
+  @Test
+  void observationBeyondAllowedClockSkewIsRejectedWithoutPersistingHistory() {
+    createPlant();
+    identifiers.willReturn(OBSERVATION_ID, RECOMMENDATION_ID);
+
+    assertThatThrownBy(
+            () ->
+                plantCareService.recordObservation(
+                    OWNER_ID,
+                    PLANT_ID,
+                    new RecordSoilObservationCommand(
+                        SoilState.MOIST,
+                        null,
+                        NOW.plus(Duration.ofMinutes(5)).plusNanos(1))))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("future");
+    assertThat(rowCount("soil_observations")).isZero();
+    assertThat(rowCount("inspection_recommendations")).isZero();
+  }
+
+  @Test
+  void observationExactlyAtAllowedClockSkewIsAcceptedUsingTheInjectedClock() {
+    createPlant();
+    identifiers.willReturn(OBSERVATION_ID, RECOMMENDATION_ID);
+
+    plantCareService.recordObservation(
+        OWNER_ID,
+        PLANT_ID,
+        new RecordSoilObservationCommand(
+            SoilState.MOIST, null, NOW.plus(Duration.ofMinutes(5))));
+
+    assertThat(rowCount("soil_observations")).isOne();
+    assertThat(rowCount("inspection_recommendations")).isOne();
+  }
+
+  @Test
+  void observationWithinAllowedClockSkewIsAccepted() {
+    createPlant();
+    identifiers.willReturn(OBSERVATION_ID, RECOMMENDATION_ID);
+
+    plantCareService.recordObservation(
+        OWNER_ID,
+        PLANT_ID,
+        new RecordSoilObservationCommand(
+            SoilState.DRY, null, NOW.plus(Duration.ofMinutes(4)).plusSeconds(59)));
+
+    assertThat(rowCount("soil_observations")).isOne();
+  }
+
+  @Test
+  void historicalObservationIsAccepted() {
+    createPlant();
+    identifiers.willReturn(OBSERVATION_ID, RECOMMENDATION_ID);
+
+    plantCareService.recordObservation(
+        OWNER_ID,
+        PLANT_ID,
+        new RecordSoilObservationCommand(
+            SoilState.WET, null, NOW.minus(Duration.ofDays(365))));
+
+    assertThat(rowCount("soil_observations")).isOne();
   }
 
   private PlantProfile createPlant() {

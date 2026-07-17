@@ -7,18 +7,25 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
@@ -35,6 +42,7 @@ class PlantControllerIntegrationTests {
   private static final UUID OWNER_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
   private static final UUID OTHER_OWNER_ID =
       UUID.fromString("20000000-0000-0000-0000-000000000002");
+  private static final Instant SERVER_NOW = Instant.parse("2026-07-17T12:05:00Z");
   private static final Instant OBSERVED_AT = Instant.parse("2026-07-17T12:00:00Z");
 
   @Autowired private MockMvc mockMvc;
@@ -61,8 +69,12 @@ class PlantControllerIntegrationTests {
         .andExpect(jsonPath("$.id", not(nullValue())))
         .andExpect(jsonPath("$.ownerId", equalTo(OWNER_ID.toString())))
         .andExpect(jsonPath("$.displayName", equalTo("Kitchen fern")))
-        .andExpect(jsonPath("$.environment", equalTo("INDOOR")))
-        .andExpect(jsonPath("$.baselineInspectionIntervalDays", equalTo(4)));
+        .andExpect(jsonPath("$.environment", equalTo("indoor")))
+        .andExpect(jsonPath("$.potMaterial", equalTo("plastic")))
+        .andExpect(jsonPath("$.drainage", equalTo("yes")))
+        .andExpect(jsonPath("$.lightLevel", equalTo("bright_indirect")))
+        .andExpect(jsonPath("$.baselineInspectionIntervalDays", equalTo(4)))
+        .andExpect(content().string(not(containsString("\"INDOOR\""))));
   }
 
   @Test
@@ -102,6 +114,18 @@ class PlantControllerIntegrationTests {
   }
 
   @Test
+  void undocumentedEnumCapitalizationReturnsAValidationError() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/plants")
+                .header("X-Owner-Id", OWNER_ID)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validPlantJson().replace("\"indoor\"", "\"Indoor\"")))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.title", equalTo("Invalid request")));
+  }
+
+  @Test
   void observationSubmissionReturnsTheGeneratedRecommendationAndExplanation() throws Exception {
     var plantId = createPlant();
 
@@ -119,7 +143,8 @@ class PlantControllerIntegrationTests {
                     }
                     """))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.observation.soilState", equalTo("DRY")))
+        .andExpect(jsonPath("$.observation.soilState", equalTo("dry")))
+        .andExpect(content().string(not(containsString("\"DRY\""))))
         .andExpect(
             jsonPath(
                 "$.recommendation.reasonCodes[0]", equalTo("SOIL_DRY_INSPECT_SOONER")))
@@ -171,6 +196,30 @@ class PlantControllerIntegrationTests {
         .andExpect(jsonPath("$.title", equalTo("Plant not found")));
   }
 
+  @Test
+  void futureObservationReturnsBadRequestWithoutPersistingCareHistory() throws Exception {
+    var plantId = createPlant();
+    var futureObservation = SERVER_NOW.plus(Duration.ofMinutes(5)).plusNanos(1);
+
+    mockMvc
+        .perform(
+            post("/api/plants/{plantId}/observations", plantId)
+                .header("X-Owner-Id", OWNER_ID)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"soilState":"moist","observedAt":"%s"}
+                    """
+                        .formatted(futureObservation)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.title", equalTo("Invalid request")))
+        .andExpect(
+            jsonPath("$.detail", equalTo("The request contains missing or invalid values.")));
+
+    org.assertj.core.api.Assertions.assertThat(rowCount("soil_observations")).isZero();
+    org.assertj.core.api.Assertions.assertThat(rowCount("inspection_recommendations")).isZero();
+  }
+
   private UUID createPlant() throws Exception {
     var response =
         mockMvc
@@ -211,5 +260,19 @@ class PlantControllerIntegrationTests {
           "baselineInspectionIntervalDays":4
         }
         """;
+  }
+
+  private long rowCount(String table) {
+    return jdbcClient.sql("SELECT COUNT(*) FROM " + table).query(Long.class).single();
+  }
+
+  @TestConfiguration
+  static class FixedClockConfiguration {
+
+    @Bean
+    @Primary
+    Clock controllerTestClock() {
+      return Clock.fixed(SERVER_NOW, ZoneOffset.UTC);
+    }
   }
 }
