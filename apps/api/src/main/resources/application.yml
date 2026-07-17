@@ -1,6 +1,15 @@
 spring:
   application:
     name: plant-care-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:file:./data/plant-care;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+  flyway:
+    enabled: true
+  jackson:
+    mapper:
+      accept-case-insensitive-enums: true
 
 app:
   version: ${APP_VERSION:0.1.0-SNAPSHOT}
