@@ -9,11 +9,7 @@ async function holdPost(page, url) {
     hit.resolve();
     const result = await release.promise;
     if (result === 'fail') return route.fulfill({status: 500, contentType: 'application/json', body: JSON.stringify({message: 'Synthetic request failed.'})});
-    if (result === 'unavailable') {
-      const response = await route.fetch(); const body = await response.json();
-      console.log('PHOTO_FALLBACK_BOUNDARY', JSON.stringify({status: response.status(), photoId: body.photoId, message: body.message}));
-      return route.fulfill({response, json: {...body, status: 'unavailable', candidates: []}});
-    }
+    if (typeof result === 'object') return route.fulfill({status: 200, json: result});
     return route.continue();
   };
   await page.route(url, handler);
@@ -48,11 +44,20 @@ async function runAsyncRaceChecks(page, base) {
   await page.getByRole('heading', {name: 'Photo failure draft', exact: true}).waitFor(); assert.equal(creates, 1);
   page.off('request', countCreates);
 
+  // Create real retained bytes explicitly: route.fetch() cannot reliably replay a browser's
+  // file-backed multipart stream. The delayed response below models accepted upload + no AI.
+  const session = await (await page.request.get(base + '/api/session')).json();
+  const upload = await page.request.post(base + '/api/garden/photos', {
+    headers: {[session.csrfHeader]: session.csrfToken},
+    multipart: {file: {name: 'synthetic-plant.png', mimeType: 'image/png', buffer: require('node:fs').readFileSync('tests/fixtures/synthetic-plant.png')}}
+  });
+  assert.equal(upload.status(), 200, await upload.text());
+  const retainedPhoto = await upload.json();
   // Successful retained photo + unavailable identification is still a valid manual fallback.
   await page.locator('#add-open').click(); await page.locator('#plant-name').fill('Fallback Fern');
   const fallback = await holdPost(page, base + '/api/garden/photos');
   await page.locator('#photo').setInputFiles('tests/fixtures/synthetic-plant.png'); await fallback.hit;
-  await page.getByRole('button', {name: 'Save plant', exact: true}).click(); await fallback.finish('unavailable');
+  await page.getByRole('button', {name: 'Save plant', exact: true}).click(); await fallback.finish({...retainedPhoto, status: 'unavailable', candidates: []});
   await page.getByRole('heading', {name: 'Fallback Fern', exact: true}).waitFor();
   assert.match(await card(page, 'Fallback Fern').locator('img').getAttribute('src'), /\/api\/garden\/photos\//);
 
