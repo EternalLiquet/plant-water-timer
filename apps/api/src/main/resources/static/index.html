@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#18171f">
+<meta name="description" content="A simple reminder to check on your plants.">
+<title>Little Garden</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/" aria-label="Little Garden home"><span class="flower" aria-hidden="true">✿</span> Little Garden</a>
+  <button class="quiet" id="help-open">How it works</button>
+</header>
+<main>
+  <section id="sign-in" hidden class="welcome panel">
+    <h1>Welcome to your garden.</h1>
+    <p>Enter your garden password to see your plants.</p>
+    <form id="login-form">
+      <input type="text" name="username" value="gardener" autocomplete="username" hidden>
+      <label for="password">Garden password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit" id="login-submit">Open my garden</button>
+    </form>
+    <p id="login-message" role="status" aria-live="polite"></p>
+  </section>
+
+  <section id="garden" hidden>
+    <div class="heading">
+      <div>
+        <h1>Your plants</h1>
+        <p class="muted">When a plant's day comes, feel the soil. If it's dry, water it and tap <strong>Watered today</strong>.</p>
+      </div>
+      <button id="add-open">＋ Add plant</button>
+    </div>
+    <p id="care-summary" class="summary"></p>
+    <p id="page-message" role="status" aria-live="polite"></p>
+    <div id="plants" class="plants"></div>
+    <div id="empty" class="empty panel" hidden>
+      <span class="big-flower" aria-hidden="true">✿</span>
+      <h2>No plants yet</h2>
+      <p>Add your first plant. A photo helps, but a name is enough.</p>
+      <button id="first-add">Add a plant</button>
+    </div>
+    <div class="bottom">
+      <button class="quiet" id="install" hidden>Add to home screen</button>
+      <button class="quiet" id="sign-out">Sign out</button>
+    </div>
+  </section>
+  <noscript>This app needs JavaScript turned on to save your plants.</noscript>
+</main>
+
+<dialog id="add-dialog" aria-labelledby="add-title">
+  <form id="plant-form" novalidate>
+    <div class="dialog-heading"><h2 id="add-title">Add a plant</h2><button type="button" class="quiet icon" id="add-close" aria-label="Close">✕</button></div>
+    <div class="photo-picker">
+      <img id="photo-preview" alt="The photo you chose" hidden>
+      <label class="file-label" for="photo">Add a photo (optional)</label>
+      <input id="photo" type="file" accept="image/jpeg,image/png" capture="environment">
+      <p class="small muted">We'll suggest what kind of plant it might be. JPG or PNG, up to 5 MB.</p>
+    </div>
+    <p id="photo-message" role="status" aria-live="polite"></p>
+    <div id="candidates" class="candidates"></div>
+    <label for="plant-name">Plant name</label>
+    <input id="plant-name" maxlength="100" placeholder="e.g. Kitchen fern" required autocomplete="off">
+    <label for="species">Plant type <span class="muted">(optional)</span></label>
+    <input id="species" maxlength="100" placeholder="Not sure? Leave it blank." autocomplete="off">
+    <label for="last-watered">Last watered <span class="muted">(optional)</span></label>
+    <input id="last-watered" type="date">
+    <p class="small muted">Leave blank if you don't remember.</p>
+    <label for="interval">Check the soil every</label>
+    <div class="number-unit"><input id="interval" type="number" inputmode="numeric" min="1" max="365" value="7" required><span>days</span></div>
+    <p class="small muted">About once a week suits most houseplants. You can change this later.</p>
+    <p id="form-message" role="alert"></p>
+    <div class="actions"><button type="button" class="quiet" id="add-cancel">Cancel</button><button id="save-plant" type="submit">Save plant</button></div>
+  </form>
+</dialog>
+
+<dialog id="edit-dialog" aria-labelledby="edit-title">
+  <form id="edit-form" novalidate>
+    <div class="dialog-heading"><h2 id="edit-title">Edit plant</h2><button type="button" class="quiet icon" id="edit-close" aria-label="Close">✕</button></div>
+    <label for="edit-name">Plant name</label>
+    <input id="edit-name" maxlength="100" required autocomplete="off">
+    <label for="edit-species">Plant type <span class="muted">(optional)</span></label>
+    <input id="edit-species" maxlength="100" autocomplete="off">
+    <label for="edit-interval">Check the soil every</label>
+    <div class="number-unit"><input id="edit-interval" type="number" inputmode="numeric" min="1" max="365" required><span>days</span></div>
+    <p class="small muted">The next check moves to match, counting from the last watering.</p>
+    <p id="edit-message" role="alert"></p>
+    <div class="actions"><button type="button" class="quiet" id="edit-cancel">Cancel</button><button id="save-edit" type="submit">Save changes</button></div>
+  </form>
+  <div class="danger-zone">
+    <button type="button" class="quiet danger" id="delete-start">Delete this plant</button>
+    <div id="delete-confirm" hidden>
+      <p id="delete-question"></p>
+      <div class="actions"><button type="button" class="quiet" id="delete-keep">Keep it</button><button type="button" class="danger-solid" id="delete-yes">Delete</button></div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="history-dialog" aria-labelledby="history-title">
+  <div class="dialog-heading"><h2 id="history-title">Watering history</h2><button class="quiet icon" id="history-close" aria-label="Close history">✕</button></div>
+  <div id="history-list"></div>
+  <form id="past-form" class="past-form" novalidate>
+    <label for="past-date">Watered on another day?</label>
+    <div class="inline"><input id="past-date" type="date" required><button type="submit" id="past-add">Add</button></div>
+    <p id="past-message" class="small" role="status" aria-live="polite"></p>
+  </form>
+</dialog>
+
+<dialog id="help-dialog" aria-labelledby="help-title">
+  <div class="dialog-heading"><h2 id="help-title">How it works</h2><button class="quiet icon" id="help-close" aria-label="Close">✕</button></div>
+  <h3>Check, then water</h3>
+  <p>Each plant gets a day to check on it. When that day comes, push a finger about an inch into the soil. If it's dry, water the plant and tap <strong>Watered today</strong>. If it's still damp, leave it and look again tomorrow.</p>
+  <h3>Adding a plant</h3>
+  <p>A photo is optional. If you add one, you'll see a few guesses at what kind of plant it is. Guesses can be wrong, so pick one only if it looks right, or type your own.</p>
+  <h3>Fixing mistakes</h3>
+  <p>Tapped <strong>Watered today</strong> by accident? Tap <strong>Undo</strong>. Forgot to record a watering? Add it under <strong>History</strong>. To rename a plant, change how often to check it, or remove it, tap <strong>Edit</strong>.</p>
+  <h3>Put it on your home screen</h3>
+  <p>In your phone's browser menu, choose <strong>Add to Home Screen</strong>. You need to be online to save changes.</p>
+  <h3>Your privacy</h3>
+  <p>Your plants and photos stay on your own garden's computer. Location details are removed from photos, and photos are never sent to an outside service. Anyone with the garden password can see and change your plants.</p>
+</dialog>
+
+<template id="plant-template">
+  <article class="plant panel">
+    <div class="plant-head">
+      <div class="plant-image"><img alt="" loading="lazy"><span class="placeholder" aria-hidden="true">✿</span></div>
+      <div>
+        <h2 class="plant-name"></h2>
+        <p class="species small muted"></p>
+      </div>
+    </div>
+    <p class="due"></p>
+    <p class="last small muted"></p>
+    <button class="water"></button>
+    <div class="card-actions">
+      <button class="history quiet">History</button>
+      <button class="edit quiet">Edit</button>
+      <button class="undo quiet" hidden>Undo</button>
+    </div>
+    <p class="card-message small" role="status"></p>
+  </article>
+</template>
+</body>
+</html>

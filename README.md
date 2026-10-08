@@ -1,32 +1,42 @@
-# Plant Water Timer
+# Little Garden · Plant Care Assistant
 
-This repository is being modernized from a legacy React/Firebase watering timer into a plant-care application.
+A phone-first, private plant-care app: add a plant (a photo is optional), and it tells you when
+to check the soil. If the soil is dry, water the plant and tap **Watered today**.
 
-## Structure
+- Original dark floral interface with plain-language labels and normal date inputs.
+- Local CPU plant identification with ranked, uncertain candidates and manual correction.
+- Durable Spring Boot / H2 plant and watering history. Plants can be renamed, given a different
+  check interval or deleted; accidental watering can be undone and missed waterings added later.
+- Private password/session access, protected photos and no third-party photo inference.
+- Optional home-screen installation on supported browsers; the server must be reachable.
 
-- `apps/api` - minimal Spring Boot API groundwork.
-- `docs/migration-plan.md` - current migration notes and next steps.
+A suggested date is a reminder to check the soil, not an instruction to water blindly. The first
+version uses an editable 7-day starting interval. It does not claim AI-derived watering advice.
 
-## Run the API
+## Start here
 
-Prerequisites:
+- [Run your garden: operator setup, privacy, backup and phone access](docs/run-your-garden.md)
+- [Local AI setup and verified model provenance](apps/identify/README.md)
+- [Verification and remaining release gates](docs/mvp-validation.md)
+- [MVP scope and GitHub work](docs/mvp-plan.md)
+- [Original deterministic soil-inspection contract](docs/adaptive-inspection-rules.md)
 
-- Java 21
-- Gradle 8+
+This branch builds on unmerged PR #3. Review and merge decisions remain separate. See the
+validation report for exactly what has and has not been tested; no live service is deployed.
+
+## Develop and test
 
 ```sh
 cd apps/api
-gradle bootRun
+./gradlew test build
+# From repository root:
+node --test tests/*.test.mjs
 ```
 
-Then open:
+Java 21 JDK is required. Python 3.12 is required for the local model companion. The Gradle wrapper
+pins the build tool. `apps/api` serves the static client, API and embedded database;
+`apps/identify` is a bounded, loopback-only inference process. No microservices platform,
+paid API key or model training is needed.
 
-- `http://localhost:8080/api/status`
-- `http://localhost:8080/actuator/health`
-
-## Test
-
-```sh
-cd apps/api
-gradle test
-```
+The earlier `X-Owner-Id` examples are development API history, not production authentication.
+Those routes are intentionally blocked in the running consumer app. Use its normal sign-in.

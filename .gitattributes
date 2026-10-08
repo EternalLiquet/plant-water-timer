@@ -1,0 +1,2 @@
+# The generated Windows Gradle launcher intentionally uses CRLF.
+apps/api/gradlew.bat whitespace=cr-at-eol

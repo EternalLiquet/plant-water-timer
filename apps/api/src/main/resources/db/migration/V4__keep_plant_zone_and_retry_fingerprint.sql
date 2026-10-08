@@ -1,0 +1,2 @@
+ALTER TABLE plants ADD COLUMN garden_zone VARCHAR(80) NOT NULL DEFAULT 'UTC';
+ALTER TABLE plants ADD COLUMN create_fingerprint VARCHAR(64);

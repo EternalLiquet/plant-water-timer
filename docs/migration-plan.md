@@ -20,13 +20,17 @@ The parts to replace are:
 
 The legacy React/Firebase app has been removed instead of retained in-tree because it exposed Firebase client configuration and is unlikely to be reused. New groundwork starts in `apps/api` as a minimal Gradle-based Spring Boot service targeting Java 21.
 
-This keeps the baseline intentionally small: it establishes the backend application shape without prematurely building the plant-care vertical slice.
+The first adaptive-care vertical slice now adds owner-scoped plant profiles, append-only soil
+observations, deterministic inspection recommendations, and recommendation history. Persistence
+uses Flyway-managed embedded H2 so the behavior can be proven transactionally before selecting
+production infrastructure.
 
 ## Next Steps
 
-1. Add persistence with PostgreSQL and Flyway.
-2. Define owner-scoped plant profile endpoints.
-3. Add plant photo metadata and storage boundaries.
-4. Introduce the plant identification provider interface with a mock implementation.
-5. Add the adaptive recommendation domain model and tests.
-6. Add the Expo mobile app once the API contract is stable enough to consume.
+1. Add authenticated identity and replace the temporary `X-Owner-Id` trust boundary.
+2. Record append-only watering events and derive a plant-specific drying-cycle history.
+3. Move from embedded H2 to PostgreSQL when deployment needs durable multi-instance storage.
+4. Add curated care profiles and manual plant identity selection.
+5. Add an object-storage boundary before accepting plant photos.
+6. Introduce ranked plant-identification providers only after manual identity and photo privacy
+   controls exist.
