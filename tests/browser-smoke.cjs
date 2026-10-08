@@ -1,5 +1,6 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
+const {runAsyncRaceChecks}=require('./browser-races.cjs');
 require('node:fs').mkdirSync('test-artifacts',{recursive:true});
 const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
 (async()=>{
@@ -54,6 +55,7 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
  await page.getByRole('heading',{name:'<img src=x onerror=alert(1)>',exact:true}).waitFor({state:'detached'});assert.equal(await page.locator('.plant').count(),1);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  const manifest=await context.request.get(BASE+'/manifest.webmanifest');assert.equal(manifest.status(),200);
+ await runAsyncRaceChecks(page,BASE);
  await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByLabel('Garden password').waitFor();
  const privateResponse=await context.request.get(BASE+'/api/garden/plants');assert.equal(privateResponse.status(),401);
  assert.deepEqual(errors,[]);

@@ -11,6 +11,8 @@ let idCounter = 0;
 const plantDays = () => plants.map(p => todayInZone(p.zone)).join(',');
 // One id per plant per calendar day, so a retried tap is saved once.
 const wateringRequests = new Map();
+// Request feedback belongs to a plant, not to a particular rendering of its card.
+const cardRequests = new Map();
 
 function message(id, text, error = false) {
   $(id).textContent = text;
@@ -140,6 +142,32 @@ function render(focus) {
   }
 }
 
+function applyCardRequest(node, plant) {
+  const request = cardRequests.get(plant.id);
+  const water = node.querySelector('.water'), undo = node.querySelector('.undo');
+  const done = plant.lastWatered === todayInZone(plant.zone);
+  const watering = request?.action === 'water';
+  water.classList.toggle('done', done);
+  water.disabled = done || !!request?.action;
+  undo.disabled = !!request?.action;
+  withName(water, watering ? 'Saving…' : done ? '✓ Watered today' : 'Watered today', plant.name,
+    watering ? 'Saving…' : done ? 'Watered today, done' : 'Watered today');
+  for (const [button, busy] of [[water, watering], [undo, request?.action === 'undo']]) {
+    if (busy) button.setAttribute('aria-busy', 'true'); else button.removeAttribute('aria-busy');
+  }
+  const status = node.querySelector('.card-message');
+  status.textContent = request?.error || '';
+  status.classList.toggle('error', !!request?.error);
+}
+
+function setCardRequest(plantId, request) {
+  const plant = plants.find(p => p.id === plantId);
+  if (!plant) { cardRequests.delete(plantId); return; }
+  cardRequests.set(plantId, request);
+  const node = [...$('plants').children].find(card => card.dataset.plantId === plantId);
+  if (node) applyCardRequest(node, plant);
+}
+
 function card(plant) {
   const node = $('plant-template').content.firstElementChild.cloneNode(true);
   node.dataset.plantId = plant.id;
@@ -172,20 +200,15 @@ function card(plant) {
   const status = node.querySelector('.card-message');
   status.id = `card-status-${++idCounter}`;
   const done = plant.lastWatered === plantToday;
-  water.classList.toggle('done', done);
-  water.disabled = done;
-  withName(water, done ? '✓ Watered today' : 'Watered today', plant.name, done ? 'Watered today, done' : 'Watered today');
+  applyCardRequest(node, plant);
   undo.hidden = !done || !plant.lastEventId;
   withName(undo, 'Undo', plant.name);
   withName(node.querySelector('.history'), 'History', plant.name);
   withName(node.querySelector('.edit'), 'Edit', plant.name);
 
   water.addEventListener('click', async () => {
-    if (water.disabled) return;
-    water.disabled = true;
-    water.setAttribute('aria-busy', 'true');
-    withName(water, 'Saving…', plant.name);
-    message(status.id, '');
+    if (water.disabled || cardRequests.get(plant.id)?.action) return;
+    setCardRequest(plant.id, {action: 'water', error: ''});
     const date = todayInZone(plant.zone);
     const key = `${plant.id}:${date}`;
     if (!wateringRequests.has(key)) wateringRequests.set(key, uuid());
@@ -193,23 +216,23 @@ function card(plant) {
       const updated = await api(`/api/garden/plants/${plant.id}/water`,
         {method: 'POST', body: {eventId: wateringRequests.get(key), date, zone: plant.zone}});
       wateringRequests.delete(key);
+      cardRequests.delete(plant.id);
       replacePlant(updated, ['.undo', '.history']);
       message('page-message', `Nice! ${plant.name} is watered. ${dueLabel(updated.nextCheck, date)}.`);
     } catch (error) {
-      message(status.id, error.message, true);
-      water.disabled = false;
-      water.removeAttribute('aria-busy');
-      withName(water, 'Watered today', plant.name);
+      setCardRequest(plant.id, {action: null, error: error.message});
     }
   });
   undo.addEventListener('click', async () => {
-    undo.disabled = true;
+    if (undo.disabled || cardRequests.get(plant.id)?.action) return;
+    setCardRequest(plant.id, {action: 'undo', error: ''});
     try {
-      replacePlant(await api(`/api/garden/plants/${plant.id}/water/${plant.lastEventId}/undo`, {method: 'POST'}), ['.water']);
+      const updated = await api(`/api/garden/plants/${plant.id}/water/${plant.lastEventId}/undo`, {method: 'POST'});
+      cardRequests.delete(plant.id);
+      replacePlant(updated, ['.water']);
       message('page-message', `Removed today's watering for ${plant.name}.`);
     } catch (error) {
-      message(status.id, error.message, true);
-      undo.disabled = false;
+      setCardRequest(plant.id, {action: null, error: error.message});
     }
   });
   node.querySelector('.history').addEventListener('click', () => openHistory(plant));
@@ -290,6 +313,7 @@ $('photo').addEventListener('change', async () => {
     message('photo-message', 'Please choose a JPG or PNG photo under 5 MB.', true);
     return;
   }
+  if (!pendingSave) message('form-message', '');
   previewUrl = URL.createObjectURL(file);
   $('photo-preview').src = previewUrl;
   $('photo-preview').hidden = false;
@@ -310,7 +334,14 @@ $('photo').addEventListener('change', async () => {
           : "We're not sure what this is. These are rough guesses; you can type your own.");
     for (const candidate of result.candidates) $('candidates').append(candidateButton(candidate));
   } catch (error) {
-    if (generation === photoGeneration) message('photo-message', `${error.message} You can still add the plant by name.`, true);
+    if (generation === photoGeneration) {
+      // A failed upload is not consent to silently drop the chosen photo and save.
+      pendingSave = false;
+      $('photo').value = ''; // Choosing the same file again must trigger a retry.
+      clearPreview();
+      message('photo-message', error.message, true);
+      message('form-message', 'The photo was not added. Choose it again, or press Save plant to continue without it.', true);
+    }
   } finally {
     if (generation === photoGeneration) { photoBusy = false; if (pendingSave) { pendingSave = false; $('plant-form').requestSubmit(); } }
   }
@@ -449,6 +480,7 @@ $('delete-yes').addEventListener('click', async () => {
   try {
     await api(`/api/garden/plants/${removed.id}`, {method: 'DELETE'});
     plants = plants.filter(p => p.id !== removed.id);
+    cardRequests.delete(removed.id);
     editBusy = false;
     closeEdit();
     render({fallback: 'add-open'});
@@ -463,10 +495,12 @@ $('delete-yes').addEventListener('click', async () => {
 
 /* ---------- History ---------- */
 
-let historyPlant = null, historyGeneration = 0;
+let historyPlant = null, historyGeneration = 0, historyDialogGeneration = 0;
 
 async function openHistory(plant) {
+  historyDialogGeneration++;
   historyPlant = plant;
+  $('past-add').disabled = false;
   $('history-title').textContent = `${plant.name}: watering history`;
   $('past-form').reset();
   $('past-date').max = todayInZone(plant.zone);
@@ -479,6 +513,7 @@ async function openHistory(plant) {
 async function loadHistory() {
   const plant = historyPlant;
   const generation = ++historyGeneration;
+  const dialogGeneration = historyDialogGeneration;
   $('history-list').textContent = 'Loading…';
   try {
     const events = await api(`/api/garden/plants/${plant.id}/history`);
@@ -510,7 +545,8 @@ async function loadHistory() {
             undo.remove();
           } catch (error) {
             undo.disabled = false;
-            message('past-message', error.message, true);
+            if (dialogGeneration === historyDialogGeneration && historyPlant?.id === plant.id && $('history-dialog').open)
+              message('past-message', error.message, true);
           }
         });
         row.append(undo);
@@ -527,24 +563,28 @@ $('past-form').addEventListener('submit', async event => {
   event.preventDefault();
   const plant = historyPlant;
   const date = $('past-date').value;
-  if (!plant) return;
+  if (!plant || $('past-add').disabled) return;
+  const generation = historyDialogGeneration;
+  const isCurrentDialog = () => generation === historyDialogGeneration
+    && historyPlant?.id === plant.id && $('history-dialog').open;
   if (!date) { message('past-message', 'Pick the day you watered.', true); return; }
   if (date > todayInZone(plant.zone)) { message('past-message', "That day hasn't happened yet.", true); return; }
   $('past-add').disabled = true;
   try {
     replacePlant(await api(`/api/garden/plants/${plant.id}/water`, {method: 'POST', body: {eventId: uuid(), date, zone: plant.zone}}));
+    if (!isCurrentDialog()) return;
     $('past-form').reset();
     message('past-message', `Added ${formatDate(date)}.`);
     await loadHistory();
   } catch (error) {
-    message('past-message', error.message, true);
+    if (isCurrentDialog()) message('past-message', error.message, true);
   } finally {
-    $('past-add').disabled = false;
+    if (isCurrentDialog()) $('past-add').disabled = false;
   }
 });
 
 $('history-close').addEventListener('click', () => $('history-dialog').close());
-$('history-dialog').addEventListener('close', () => { historyGeneration++; historyPlant = null; });
+$('history-dialog').addEventListener('close', () => { historyGeneration++; historyDialogGeneration++; historyPlant = null; });
 
 /* ---------- Help, install, connection ---------- */
 
