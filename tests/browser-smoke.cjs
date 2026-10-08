@@ -55,7 +55,20 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
  await page.getByRole('heading',{name:'<img src=x onerror=alert(1)>',exact:true}).waitFor({state:'detached'});assert.equal(await page.locator('.plant').count(),1);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  const manifest=await context.request.get(BASE+'/manifest.webmanifest');assert.equal(manifest.status(),200);
- await runAsyncRaceChecks(page,BASE);
+ try { await runAsyncRaceChecks(page,BASE); }
+ catch (error) {
+  console.error('ASYNC_RACE_STATE',JSON.stringify(await page.evaluate(()=>({
+   dialogOpen:document.getElementById('add-dialog').open,
+   photoMessage:document.getElementById('photo-message').textContent,
+   formMessage:document.getElementById('form-message').textContent,
+   name:document.getElementById('plant-name').value,
+   interval:document.getElementById('interval').value,
+   saveDisabled:document.getElementById('save-plant').disabled,
+   cardNames:[...document.querySelectorAll('.plant-name')].map(x=>x.textContent)
+  }))));
+  await page.screenshot({path:'test-artifacts/05-async-race-failure.png',fullPage:true});
+  throw error;
+ }
  await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByLabel('Garden password').waitFor();
  const privateResponse=await context.request.get(BASE+'/api/garden/plants');assert.equal(privateResponse.status(),401);
  assert.deepEqual(errors,[]);

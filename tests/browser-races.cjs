@@ -11,6 +11,7 @@ async function holdPost(page, url) {
     if (result === 'fail') return route.fulfill({status: 500, contentType: 'application/json', body: JSON.stringify({message: 'Synthetic request failed.'})});
     if (result === 'unavailable') {
       const response = await route.fetch(); const body = await response.json();
+      console.log('PHOTO_FALLBACK_BOUNDARY', JSON.stringify({status: response.status(), photoId: body.photoId, message: body.message}));
       return route.fulfill({response, json: {...body, status: 'unavailable', candidates: []}});
     }
     return route.continue();
