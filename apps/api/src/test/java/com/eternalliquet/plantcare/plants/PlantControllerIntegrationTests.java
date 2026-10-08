@@ -36,7 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
       "spring.datasource.username=sa",
       "spring.datasource.password="
     })
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
 class PlantControllerIntegrationTests {
 
   private static final UUID OWNER_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");

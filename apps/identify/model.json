@@ -1,0 +1,11 @@
+{
+  "repository": "domai-tb/OpenPlants-Identification-ViT-Base-Patch16-224",
+  "revision": "30794da002827ad922366fe88840c5a2d8a4a31d",
+  "declaredLicense": "apache-2.0",
+  "files": {
+    "config.json": {"sha256": "9efba5cac89d7c98b19b4f990c48bce55c068ce60a3683099dd28ea8a290f80f", "size": 1003987},
+    "preprocessor_config.json": {"sha256": "a34861a24e781942424ad790b82bc99348404a2e64ea882de88c40905851698d", "size": 325},
+    "model.safetensors": {"sha256": "d02b1982e5082f268bef1843a1799d8abaea588627ef50c9e2afe0ef55173244", "size": 388831924},
+    "README.md": {"sha256": "8bc14a14ca1cec334e401ece3dccff93e96995ce29700ecf96feb59faaf2b009", "size": 4216}
+  }
+}
