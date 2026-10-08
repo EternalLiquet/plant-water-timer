@@ -24,6 +24,8 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
  await page.getByRole('button',{name:'Save plant',exact:true}).click();await page.getByRole('heading',{name:'Kitchen Monstera',exact:true}).waitFor();
  assert.match(await page.locator('#care-summary').textContent(),/1 plant to check today/);
  await page.getByRole('button',{name:'Watered today, Kitchen Monstera'}).click();await page.getByRole('button',{name:/✓ Watered today/}).waitFor();
+ // Keyboard and screen-reader users stay on the plant they just watered.
+ assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Undo, Kitchen Monstera');
  assert.match(await page.locator('#care-summary').textContent(),/Nothing to check today/);
  await page.screenshot({path:'test-artifacts/03-watered-mobile.png',fullPage:true});
  // A watering that happened on another day can still be recorded from History.
@@ -35,6 +37,7 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
  await page.getByRole('button',{name:'Undo, Kitchen Monstera'}).click();await page.getByRole('button',{name:'Watered today, Kitchen Monstera'}).waitFor();
  // Name, type and the reminder interval can be changed after adding a plant.
  await page.getByRole('button',{name:'Edit, Kitchen Monstera'}).click();
+ assert.equal(await page.evaluate(()=>document.activeElement?.id),'edit-name');
  await edit.getByLabel('Plant name',{exact:true}).fill('Living room Monstera');await edit.getByLabel('Check the soil every').fill('10');
  await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.getByRole('heading',{name:'Living room Monstera',exact:true}).waitFor();
  await page.screenshot({path:'test-artifacts/04-edited-mobile.png',fullPage:true});
