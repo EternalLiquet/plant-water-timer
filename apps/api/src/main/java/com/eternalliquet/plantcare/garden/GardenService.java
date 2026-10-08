@@ -279,7 +279,7 @@ class GardenService {
     return get(owner, id);
   }
 
-  void delete(UUID owner, UUID id) throws java.io.IOException {
+  void delete(UUID owner, UUID id) {
     UUID photo =
         transactions.execute(
             tx -> {
@@ -297,8 +297,15 @@ class GardenService {
                   .update();
               return photoId;
             });
-    // The photo is no longer referenced. If removal fails now, unused-photo cleanup retries it.
-    if (photo != null) photos.discard(owner, photo);
+    // The plant is already gone, so report success. An unreferenced photo that cannot be removed
+    // now is retried by the unused-photo cleanup.
+    if (photo != null)
+      try {
+        photos.discard(owner, photo);
+      } catch (java.io.IOException | RuntimeException e) {
+        org.slf4j.LoggerFactory.getLogger(GardenService.class)
+            .warn("Deleted plant's photo will be removed by cleanup: {}", e.getClass().getSimpleName());
+      }
   }
 
   @Transactional

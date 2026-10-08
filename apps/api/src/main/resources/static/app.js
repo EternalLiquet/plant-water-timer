@@ -26,7 +26,8 @@ async function loadSession() {
   return session;
 }
 
-async function api(path, {method = 'GET', body} = {}) {
+async function api(path, options = {}, retried = false) {
+  let {method = 'GET', body} = options;
   const headers = {};
   if (method !== 'GET') headers[session.csrfHeader] = session.csrfToken;
   if (body && !(body instanceof FormData)) {
@@ -46,6 +47,15 @@ async function api(path, {method = 'GET', body} = {}) {
   let data = null;
   try { data = await response.json(); } catch { /* Some responses have no body. */ }
   if (!response.ok) {
+    if (response.status === 403 && !retried) {
+      // An expired session is refused by its stale security token before sign-in is checked.
+      await loadSession().catch(() => {});
+      if (!session?.authenticated) {
+        showSignedOut('You were signed out after a while away. Sign in again to keep going.');
+        throw new Error('Please sign in again.');
+      }
+      return api(path, options, true); // Refused requests were not saved, so trying again is safe.
+    }
     if (response.status === 403) throw new Error('This page is out of date. Refresh the page and try again.');
     if (response.status === 413) throw new Error('That photo is too large. Choose one under 5 MB.');
     throw new Error(data?.message || "That didn't save. Please try again.");
@@ -108,24 +118,31 @@ async function refresh() {
   render();
 }
 
-function withName(button, label, name) {
+function withName(button, label, name, spoken = label) {
   // Visible text stays short; screen readers hear which plant the button is for.
   // The spoken name starts with the visible words so voice control still matches them.
   button.textContent = label;
-  button.setAttribute('aria-label', `${label}, ${name}`);
+  button.setAttribute('aria-label', `${spoken}, ${name}`);
 }
 
-function render() {
+function render(focus) {
   daySignature = plantDays();
   const container = $('plants');
   container.replaceChildren();
   $('empty').hidden = plants.length > 0;
   $('care-summary').textContent = careSummary(plants);
   for (const plant of sortForCare(plants)) container.append(card(plant));
+  // Rebuilding the cards drops keyboard focus, so put it back on the plant just changed.
+  if (focus) {
+    const target = focus.plantId && [...container.children].find(card => card.dataset.plantId === focus.plantId);
+    const button = target && focus.selectors.map(selector => target.querySelector(selector)).find(el => el && !el.hidden && !el.disabled);
+    (button || $(focus.fallback || 'add-open')).focus();
+  }
 }
 
 function card(plant) {
   const node = $('plant-template').content.firstElementChild.cloneNode(true);
+  node.dataset.plantId = plant.id;
   const plantToday = todayInZone(plant.zone);
   node.querySelector('.plant-name').textContent = plant.name;
   const species = node.querySelector('.species');
@@ -157,7 +174,7 @@ function card(plant) {
   const done = plant.lastWatered === plantToday;
   water.classList.toggle('done', done);
   water.disabled = done;
-  withName(water, done ? '✓ Watered today' : 'Watered today', plant.name);
+  withName(water, done ? '✓ Watered today' : 'Watered today', plant.name, done ? 'Watered today, done' : 'Watered today');
   undo.hidden = !done || !plant.lastEventId;
   withName(undo, 'Undo', plant.name);
   withName(node.querySelector('.history'), 'History', plant.name);
@@ -176,7 +193,7 @@ function card(plant) {
       const updated = await api(`/api/garden/plants/${plant.id}/water`,
         {method: 'POST', body: {eventId: wateringRequests.get(key), date, zone: plant.zone}});
       wateringRequests.delete(key);
-      replacePlant(updated);
+      replacePlant(updated, ['.undo', '.history']);
       message('page-message', `Nice! ${plant.name} is watered. ${dueLabel(updated.nextCheck, date)}.`);
     } catch (error) {
       message(status.id, error.message, true);
@@ -188,8 +205,8 @@ function card(plant) {
   undo.addEventListener('click', async () => {
     undo.disabled = true;
     try {
-      replacePlant(await api(`/api/garden/plants/${plant.id}/water/${plant.lastEventId}/undo`, {method: 'POST'}));
-      message('page-message', `Took back today's watering for ${plant.name}.`);
+      replacePlant(await api(`/api/garden/plants/${plant.id}/water/${plant.lastEventId}/undo`, {method: 'POST'}), ['.water']);
+      message('page-message', `Removed today's watering for ${plant.name}.`);
     } catch (error) {
       message(status.id, error.message, true);
       undo.disabled = false;
@@ -200,9 +217,9 @@ function card(plant) {
   return node;
 }
 
-function replacePlant(updated) {
+function replacePlant(updated, focusSelectors) {
   plants = plants.map(p => (p.id === updated.id ? updated : p));
-  render();
+  render(focusSelectors && {plantId: updated.id, selectors: focusSelectors});
 }
 
 /* ---------- Add a plant ---------- */
@@ -239,13 +256,18 @@ function openAdd() {
 
 function closeAdd() {
   if (formBusy) return;
+  $('add-dialog').close();
+}
+
+// Browsers can close a dialog without a cancel event (a repeated Esc or back gesture), so all
+// clean-up happens here, whichever way it closed.
+$('add-dialog').addEventListener('close', () => {
   photoGeneration++;
   void discard(photoId);
   photoId = null; photoBusy = false; pendingSave = false;
   clearPreview();
-  $('add-dialog').close();
   $('add-open').focus();
-}
+});
 
 $('add-open').addEventListener('click', openAdd);
 $('first-add').addEventListener('click', openAdd);
@@ -334,6 +356,7 @@ $('plant-form').addEventListener('submit', async event => {
     return;
   }
   formBusy = true;
+  $('photo').disabled = true; // Changing the photo mid-save would discard the one being saved.
   $('save-plant').disabled = true;
   $('save-plant').textContent = 'Saving…';
   message('form-message', '');
@@ -349,9 +372,10 @@ $('plant-form').addEventListener('submit', async event => {
     closeAdd();
     message('page-message', `${plant.name} added.`);
   } catch (error) {
-    message('form-message', error.message, true);
+    message($('add-dialog').open ? 'form-message' : 'page-message', error.message, true);
   } finally {
     formBusy = false;
+    $('photo').disabled = false;
     $('save-plant').disabled = false;
     $('save-plant').textContent = 'Save plant';
   }
@@ -370,6 +394,7 @@ function openEdit(plant) {
   $('delete-confirm').hidden = true;
   $('delete-start').hidden = false;
   $('edit-dialog').showModal();
+  $('edit-name').focus();
 }
 
 function closeEdit() {
@@ -393,12 +418,12 @@ $('edit-form').addEventListener('submit', async event => {
   try {
     const updated = await api(`/api/garden/plants/${editing.id}`, {method: 'PATCH', body: {
       name, species: $('edit-species').value.trim(), intervalDays: Number($('edit-interval').value)}});
-    replacePlant(updated);
     editBusy = false;
     closeEdit();
+    replacePlant(updated, ['.edit']);
     message('page-message', `Saved changes to ${updated.name}.`);
   } catch (error) {
-    message('edit-message', error.message, true);
+    message($('edit-dialog').open ? 'edit-message' : 'page-message', error.message, true);
   } finally {
     editBusy = false;
     $('save-edit').disabled = false;
@@ -424,12 +449,12 @@ $('delete-yes').addEventListener('click', async () => {
   try {
     await api(`/api/garden/plants/${removed.id}`, {method: 'DELETE'});
     plants = plants.filter(p => p.id !== removed.id);
-    render();
     editBusy = false;
     closeEdit();
+    render({fallback: 'add-open'});
     message('page-message', `${removed.name} was deleted.`);
   } catch (error) {
-    message('edit-message', error.message, true);
+    message($('edit-dialog').open ? 'edit-message' : 'page-message', error.message, true);
   } finally {
     editBusy = false;
     $('delete-yes').disabled = false;
@@ -467,7 +492,7 @@ async function loadHistory() {
       const row = document.createElement('li');
       row.className = 'history-entry';
       const text = document.createElement('p');
-      const label = () => `${entry.date === plantToday ? 'Today' : formatDate(entry.date, undefined, plantToday)}${entry.undone ? ' (taken back)' : ''}`;
+      const label = () => `${entry.date === plantToday ? 'Today' : formatDate(entry.date, undefined, plantToday)}${entry.undone ? ' (removed)' : ''}`;
       text.textContent = label();
       text.classList.toggle('muted', entry.undone);
       row.append(text);

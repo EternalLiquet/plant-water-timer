@@ -23,7 +23,7 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
  assert.equal(await add.getByLabel('Check the soil every').inputValue(),'7');
  await page.getByRole('button',{name:'Save plant',exact:true}).click();await page.getByRole('heading',{name:'Kitchen Monstera',exact:true}).waitFor();
  assert.match(await page.locator('#care-summary').textContent(),/1 plant to check today/);
- await page.getByRole('button',{name:'Watered today, Kitchen Monstera'}).click();await page.getByRole('button',{name:/✓ Watered today/}).waitFor();
+ await page.getByRole('button',{name:'Watered today, Kitchen Monstera'}).click();await page.getByRole('button',{name:'Watered today, done, Kitchen Monstera'}).waitFor();
  // Keyboard and screen-reader users stay on the plant they just watered.
  assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Undo, Kitchen Monstera');
  assert.match(await page.locator('#care-summary').textContent(),/Nothing to check today/);

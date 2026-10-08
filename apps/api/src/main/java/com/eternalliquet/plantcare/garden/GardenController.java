@@ -36,7 +36,7 @@ class GardenController {
 
   @DeleteMapping("/plants/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  void delete(Authentication a, @PathVariable UUID id) throws java.io.IOException {
+  void delete(Authentication a, @PathVariable UUID id) {
     garden.delete(GardenSecurity.owner(a), id);
   }
 
