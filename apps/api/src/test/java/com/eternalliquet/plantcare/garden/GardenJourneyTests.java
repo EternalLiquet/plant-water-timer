@@ -170,4 +170,99 @@ class GardenJourneyTests {
                   .content("{}"))
           .andExpect(status().isForbidden());
   }
+  private String createPlant(String body) throws Exception {
+    String result =
+        mvc.perform(
+                post("/api/garden/plants")
+                    .with(csrf())
+                    .contentType("application/json")
+                    .content(body))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(result).get("id").asText();
+  }
+
+  @Test
+  @WithMockUser(username = "gardener")
+  void editingAPlantRenamesItAndMovesTheNextCheckToTheNewInterval() throws Exception {
+    String id =
+        createPlant(
+            "{\"name\":\"Fern\",\"intervalDays\":7,\"lastWatered\":\"2026-01-01\",\"zone\":\"UTC\"}");
+    mvc.perform(
+            patch("/api/garden/plants/" + id)
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"name\":\"Hall fern\",\"species\":\"Boston fern\",\"intervalDays\":3}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("Hall fern"))
+        .andExpect(jsonPath("$.species").value("Boston fern"))
+        .andExpect(jsonPath("$.intervalDays").value(3))
+        .andExpect(jsonPath("$.lastWatered").value("2026-01-01"))
+        .andExpect(jsonPath("$.nextCheck").value("2026-01-04"));
+    mvc.perform(get("/api/garden/plants"))
+        .andExpect(jsonPath("$[?(@.id=='" + id + "')].name").value("Hall fern"));
+  }
+
+  @Test
+  @WithMockUser(username = "gardener")
+  void editingRejectsABlankNameOrAnImpossibleInterval() throws Exception {
+    String id = createPlant("{\"name\":\"Ivy\",\"intervalDays\":7,\"zone\":\"UTC\"}");
+    for (String body :
+        java.util.List.of(
+            "{\"name\":\" \",\"intervalDays\":7}", "{\"name\":\"Ivy\",\"intervalDays\":0}"))
+      mvc.perform(
+              patch("/api/garden/plants/" + id)
+                  .with(csrf())
+                  .contentType("application/json")
+                  .content(body))
+          .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @WithMockUser(username = "gardener")
+  void deletingAPlantRemovesItAndItsWateringHistory() throws Exception {
+    String id =
+        createPlant(
+            "{\"name\":\"Old cactus\",\"intervalDays\":14,\"lastWatered\":\"2026-01-01\",\"zone\":\"UTC\"}");
+    mvc.perform(delete("/api/garden/plants/" + id).with(csrf()))
+        .andExpect(status().isNoContent());
+    mvc.perform(get("/api/garden/plants"))
+        .andExpect(jsonPath("$[?(@.id=='" + id + "')]").isEmpty());
+    mvc.perform(get("/api/garden/plants/" + id + "/history")).andExpect(status().isNotFound());
+    mvc.perform(delete("/api/garden/plants/" + id).with(csrf())).andExpect(status().isNotFound());
+  }
+
+  @Test
+  @WithMockUser(username = "owner-a")
+  void anotherOwnerCannotEditOrDeletePlant() throws Exception {
+    String id = createPlant("{\"name\":\"Basil\",\"intervalDays\":2,\"zone\":\"UTC\"}");
+    mvc.perform(
+            patch("/api/garden/plants/" + id)
+                .with(user("owner-b"))
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"name\":\"Mine now\",\"intervalDays\":2}"))
+        .andExpect(status().isNotFound());
+    mvc.perform(delete("/api/garden/plants/" + id).with(user("owner-b")).with(csrf()))
+        .andExpect(status().isNotFound());
+    mvc.perform(get("/api/garden/plants/" + id + "/history")).andExpect(status().isOk());
+  }
+
+  @Test
+  @WithMockUser(username = "gardener")
+  void errorMessagesAvoidTechnicalWording() throws Exception {
+    mvc.perform(
+            post("/api/garden/plants")
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"name\":\"Mint\",\"intervalDays\":7,\"zone\":\"Not/AZone\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            jsonPath("$.message")
+                .value(
+                    "Your device's time zone wasn't recognized. Check your phone's date and time"
+                        + " settings, then try again."));
+  }
 }
