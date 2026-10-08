@@ -55,8 +55,9 @@ jobs:
       - name: Mobile browser journey with synthetic identification boundary
         shell: bash
         run: |
+          DATA=$(mktemp -d)
           python3 tests/identification-stub.py & MODEL=$!
-          GARDEN_PASSWORD=synthetic-garden-test-2026 DATABASE_URL='jdbc:h2:file:./build/browser-garden;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH' PHOTO_DIRECTORY=./build/browser-photos java -jar apps/api/build/libs/plant-care-api-0.1.0-SNAPSHOT.jar > /tmp/garden-browser.log 2>&1 & APP=$!
+          GARDEN_PASSWORD=synthetic-garden-test-2026 DATABASE_URL="jdbc:h2:file:$DATA/garden;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH" PHOTO_DIRECTORY="$DATA/photos" java -jar apps/api/build/libs/plant-care-api-0.1.0-SNAPSHOT.jar > /tmp/garden-browser.log 2>&1 & APP=$!
           trap 'kill "$APP" "$MODEL" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do curl -fs http://127.0.0.1:8080/api/session >/dev/null && break; sleep 1; done
           npm run test:browser

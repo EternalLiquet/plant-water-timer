@@ -28,10 +28,14 @@ The cloud shell's Chromium launch cannot create its required Unix socket. The su
 browser also rejects the loopback URL with `ERR_BLOCKED_BY_CLIENT`; no hostname workaround was
 used. Therefore local browser screenshots and interaction tests are **not** claimed.
 
-A standard GitHub Actions browser job is included to run the responsive UI at 390×844 using
-synthetic data and a deterministic identification stub, with screenshots as build artifacts.
-This tests browser interaction and presentation, separately from the real-model HTTP test above.
-Record the final commit and CI result here before calling that gate passed.
+GitHub Actions run [37754621108](https://github.com/EternalLiquet/plant-water-timer/actions/runs/37754621108)
+passed all three jobs for head `d2634ba`: API/build/client checks, identification boundary, and
+390×844 browser interaction. Its three actual screenshots were inspected: readable dark layout,
+clear primary action and no horizontal overflow. The browser journey covered photo confirmation,
+watering, history, reload, Undo, cancellation/reopening, literal text rendering and logout access.
+It used synthetic data and an identification stub; real-model HTTP verification is separate.
+A subsequent small file-picker polish and isolated CI data directory are tracked by the PR's
+latest checks. Consult those checks for the current exact head before merging.
 
 ## External release gates
 
