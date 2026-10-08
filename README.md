@@ -1,11 +1,12 @@
 # Little Garden · Plant Care Assistant
 
-A phone-first, private plant-care app: add a plant from a photo, confirm a likely name, record
-watering and see the next suggested check. Tap **Watered today** when you have watered it.
+A phone-first, private plant-care app: add a plant (a photo is optional), and it tells you when
+to check the soil. If the soil is dry, water the plant and tap **Watered today**.
 
-- Original dark floral interface with short labels and normal date inputs.
+- Original dark floral interface with plain-language labels and normal date inputs.
 - Local CPU plant identification with ranked, uncertain candidates and manual correction.
-- Durable Spring Boot / H2 plant and watering history; accidental watering can be undone.
+- Durable Spring Boot / H2 plant and watering history. Plants can be renamed, given a different
+  check interval or deleted; accidental watering can be undone and missed waterings added later.
 - Private password/session access, protected photos and no third-party photo inference.
 - Optional home-screen installation on supported browsers; the server must be reachable.
 

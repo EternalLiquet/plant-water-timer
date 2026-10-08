@@ -17,6 +17,7 @@ class GardenService {
   private final PlantCareService care;
   private final Clock clock;
   private final TransactionTemplate transactions;
+  private final PhotoService photos;
   private final Object[] createLocks =
       java.util.stream.IntStream.range(0, 64).mapToObj(i -> new Object()).toArray();
 
@@ -24,8 +25,10 @@ class GardenService {
       JdbcClient db,
       PlantCareService care,
       Clock clock,
-      PlatformTransactionManager transactionManager) {
+      PlatformTransactionManager transactionManager,
+      PhotoService photos) {
     this.db = db;
+    this.photos = photos;
     this.care = care;
     this.clock = clock;
     this.transactions = new TransactionTemplate(transactionManager);
@@ -54,6 +57,8 @@ class GardenService {
       String zone) {}
 
   record WaterRequest(UUID eventId, LocalDate date, String zone) {}
+
+  record Edit(String name, String species, Integer intervalDays) {}
 
   private static ResponseStatusException missing() {
     return new ResponseStatusException(HttpStatus.NOT_FOUND, "Plant not found.");
@@ -107,14 +112,18 @@ class GardenService {
                               })
                       .optional();
               Object[] w = latest.orElse(new Object[] {null, null, null});
+              int days = rs.getInt("baseline_inspection_interval_days");
+              // The stored next_check records what was suggested at watering time. The live
+              // suggestion follows the plant's current interval, so editing it takes effect now.
+              LocalDate lastWatered = (LocalDate) w[1];
               return new Plant(
                   id,
                   rs.getString("display_name"),
                   rs.getString("known_name"),
                   rs.getObject("photo_id", UUID.class),
-                  (LocalDate) w[1],
-                  (LocalDate) w[2],
-                  rs.getInt("baseline_inspection_interval_days"),
+                  lastWatered,
+                  lastWatered == null ? null : WateringPolicy.nextCheck(lastWatered, days),
+                  days,
                   (UUID) w[0],
                   rs.getString("garden_zone"));
             })
@@ -132,10 +141,7 @@ class GardenService {
   }
 
   private Plant createInTransaction(UUID owner, Create request) {
-    if (request.name() == null || request.name().isBlank() || request.name().strip().length() > 100)
-      throw new IllegalArgumentException("Give your plant a name, up to 100 characters.");
-    if (request.species() != null && request.species().length() > 100)
-      throw new IllegalArgumentException("Use a plant type up to 100 characters.");
+    validateNames(request.name(), request.species());
     WateringPolicy.nextCheck(LocalDate.now(clock), request.intervalDays());
     validateDate(request.lastWatered(), request.zone());
     String fingerprint = createFingerprint(request);
@@ -223,7 +229,7 @@ class GardenService {
     if (existing.isPresent()) {
       if (!existing.get().equals(List.of(id, owner, request.date())))
         throw new ResponseStatusException(
-            HttpStatus.CONFLICT, "That save request was already used. Please refresh.");
+            HttpStatus.CONFLICT, "This was already saved. Refresh the page to see the latest.");
       return get(owner, id);
     }
     // Separate repeated taps on the same calendar day are still one watering record.
@@ -251,6 +257,48 @@ class GardenService {
         .param("now", clock.instant())
         .update();
     return get(owner, id);
+  }
+
+  @Transactional
+  Plant edit(UUID owner, UUID id, Edit request) {
+    owned(owner, id, true);
+    validateNames(request.name(), request.species());
+    if (request.intervalDays() == null)
+      throw new IllegalArgumentException("Choose how many days until the next soil check.");
+    WateringPolicy.nextCheck(LocalDate.now(clock), request.intervalDays());
+    String species = request.species() == null ? "" : request.species().strip();
+    db.sql(
+            "UPDATE plants SET display_name=:name,known_name=:species,"
+                + "baseline_inspection_interval_days=:days WHERE id=:id AND owner_id=:owner")
+        .param("name", request.name().strip())
+        .param("species", species.isEmpty() ? null : species)
+        .param("days", request.intervalDays())
+        .param("id", id)
+        .param("owner", owner)
+        .update();
+    return get(owner, id);
+  }
+
+  void delete(UUID owner, UUID id) throws java.io.IOException {
+    UUID photo =
+        transactions.execute(
+            tx -> {
+              owned(owner, id, true);
+              UUID photoId = get(owner, id).photoId();
+              for (String table :
+                  List.of("inspection_recommendations", "soil_observations", "watering_events"))
+                db.sql("DELETE FROM " + table + " WHERE plant_id=:id AND owner_id=:owner")
+                    .param("id", id)
+                    .param("owner", owner)
+                    .update();
+              db.sql("DELETE FROM plants WHERE id=:id AND owner_id=:owner")
+                  .param("id", id)
+                  .param("owner", owner)
+                  .update();
+              return photoId;
+            });
+    // The photo is no longer referenced. If removal fails now, unused-photo cleanup retries it.
+    if (photo != null) photos.discard(owner, photo);
   }
 
   @Transactional
@@ -292,12 +340,21 @@ class GardenService {
     try {
       z = ZoneId.of(zone == null ? "UTC" : zone);
     } catch (DateTimeException ex) {
-      throw new IllegalArgumentException("Choose a valid time zone.");
+      throw new IllegalArgumentException(
+          "Your device's time zone wasn't recognized. Check your phone's date and time settings,"
+              + " then try again.");
     }
     if (date != null
         && (date.isAfter(LocalDate.now(clock.withZone(z)))
             || date.isBefore(LocalDate.of(1900, 1, 1))))
       throw new IllegalArgumentException("Choose today or a past watering date after 1900.");
+  }
+
+  private static void validateNames(String name, String species) {
+    if (name == null || name.isBlank() || name.strip().length() > 100)
+      throw new IllegalArgumentException("Give your plant a name, up to 100 characters.");
+    if (species != null && species.strip().length() > 100)
+      throw new IllegalArgumentException("Use a plant type up to 100 characters.");
   }
 
   private static String createFingerprint(Create request) {

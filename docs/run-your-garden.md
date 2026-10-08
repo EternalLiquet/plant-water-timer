@@ -59,8 +59,8 @@ internet. Public hosting, account provisioning, firewall changes and certificate
 own operator decisions and are not performed by this code change. Internet-facing deployments
 need additional edge abuse controls, monitoring and an independent security review.
 
-On a supported phone browser, open that address, sign in, then use **Add to Home Screen** or
-**Install app**. The app offers an install button only when the browser supplies one. A file
+On a supported phone browser, open that address, sign in, then use **Add to Home Screen** from
+the browser menu. The app offers an install button only when the browser supplies one. A file
 picker is always available alongside camera capture. HEIC is not supported in this first
 release: choose a JPG or PNG. Photos must be no larger than 5 MB / 20 megapixels.
 
@@ -94,7 +94,8 @@ history. Never delete the data folder to fix a startup error. Database schema up
 append-only Flyway migrations; take a backup before updating. A changing working directory can
 look like an empty garden, so verify the data path before creating new records.
 
-The MVP has watering Undo but no account deletion/export UI. For complete removal, stop the
+People can delete a single plant (with its watering history and photo) from **Edit**. There is
+no whole-garden deletion or export screen. For complete removal, stop the
 services and remove the correct garden's data and backups under your own retention policy.
 That operation is destructive; don't automate it or confuse it with uninstalling a home-screen
 shortcut. The shortcut does not own the server's records. The operator is responsible for

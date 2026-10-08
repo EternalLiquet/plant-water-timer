@@ -5,7 +5,7 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,timezoneId:'America/New_York'});
- const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const page=await context.newPage();const add=page.locator('#add-dialog'),edit=page.locator('#edit-dialog');const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(BASE+'/');
  // A sign-in form left open after its session expired still signs in, instead of showing an error page.
  await page.getByLabel('Garden password').waitFor();await context.clearCookies();
@@ -19,8 +19,8 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
  await page.locator('#photo').setInputFiles({name:'notes.txt',mimeType:'text/plain',buffer:Buffer.from('not a photo')});
  assert.equal(await page.locator('#photo-preview').isVisible(),false);assert.equal(await page.locator('#candidates button').count(),0);
  await page.locator('#photo').setInputFiles(process.env.PLANT_FIXTURE||'tests/fixtures/synthetic-plant.png');
- await page.getByRole('button',{name:/Monstera deliciosa/}).click();await page.getByLabel('Plant name',{exact:true}).fill('Kitchen Monstera');await page.getByLabel('Last watered').fill('2026-01-01');
- assert.equal(await page.getByLabel('Check the soil every').inputValue(),'7');
+ await page.getByRole('button',{name:/Monstera deliciosa/}).click();await add.getByLabel('Plant name',{exact:true}).fill('Kitchen Monstera');await add.getByLabel('Last watered').fill('2026-01-01');
+ assert.equal(await add.getByLabel('Check the soil every').inputValue(),'7');
  await page.getByRole('button',{name:'Save plant',exact:true}).click();await page.getByRole('heading',{name:'Kitchen Monstera',exact:true}).waitFor();
  assert.match(await page.locator('#care-summary').textContent(),/1 plant to check today/);
  await page.getByRole('button',{name:'Watered today, Kitchen Monstera'}).click();await page.getByRole('button',{name:/✓ Watered today/}).waitFor();
@@ -35,14 +35,14 @@ const BASE=process.env.GARDEN_URL||'http://127.0.0.1:8080';
  await page.getByRole('button',{name:'Undo, Kitchen Monstera'}).click();await page.getByRole('button',{name:'Watered today, Kitchen Monstera'}).waitFor();
  // Name, type and the reminder interval can be changed after adding a plant.
  await page.getByRole('button',{name:'Edit, Kitchen Monstera'}).click();
- await page.getByLabel('Plant name',{exact:true}).last().fill('Living room Monstera');await page.getByLabel('Check the soil every').last().fill('10');
+ await edit.getByLabel('Plant name',{exact:true}).fill('Living room Monstera');await edit.getByLabel('Check the soil every').fill('10');
  await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.getByRole('heading',{name:'Living room Monstera',exact:true}).waitFor();
  await page.screenshot({path:'test-artifacts/04-edited-mobile.png',fullPage:true});
  // Cancel/back/repeat-open is safe and restores the main screen.
- await page.locator('#add-open').click();await page.getByLabel('Plant name',{exact:true}).first().fill('Discard me');await page.keyboard.press('Escape');assert.equal(await page.locator('#add-dialog').isVisible(),false);
- await page.locator('#add-open').click();assert.equal(await page.getByLabel('Plant name',{exact:true}).first().inputValue(),'');await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.locator('#add-open').click();await add.getByLabel('Plant name',{exact:true}).fill('Discard me');await page.keyboard.press('Escape');assert.equal(await page.locator('#add-dialog').isVisible(),false);
+ await page.locator('#add-open').click();assert.equal(await add.getByLabel('Plant name',{exact:true}).inputValue(),'');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  // Source data is treated as text, not markup.
- await page.locator('#add-open').click();await page.getByLabel('Plant name',{exact:true}).first().fill('<img src=x onerror=alert(1)>');await page.getByRole('button',{name:'Save plant',exact:true}).click();await page.getByRole('heading',{name:'<img src=x onerror=alert(1)>',exact:true}).waitFor();
+ await page.locator('#add-open').click();await add.getByLabel('Plant name',{exact:true}).fill('<img src=x onerror=alert(1)>');await page.getByRole('button',{name:'Save plant',exact:true}).click();await page.getByRole('heading',{name:'<img src=x onerror=alert(1)>',exact:true}).waitFor();
  assert.equal(await page.locator('.plant-name img').count(),0);
  // Deleting asks first, and keeping the plant changes nothing.
  await page.getByRole('button',{name:'Edit, <img src=x onerror=alert(1)>'}).click();await page.getByRole('button',{name:'Delete this plant'}).click();
