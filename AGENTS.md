@@ -27,8 +27,11 @@ The product should eventually support:
 - `apps/api/src/main/resources/db/migration` contains append-only Flyway migrations.
 - The current embedded H2 database is a deliberately small first persistence step. Do not force
   a database or framework migration without an approved decision and an incremental plan.
-- There is no active UI and no authentication provider. `X-Owner-Id` is temporary owner context,
-  not proof of identity. Do not present it as a security boundary.
+- `apps/api/src/main/resources/static` is the active dark floral browser client. It uses a
+  password-backed session and CSRF protection for one private garden. The legacy `X-Owner-Id`
+  routes are denied in the running consumer app; never treat that header as authentication.
+- `apps/identify` provides optional local Python identification; `/mcp` is a separate private
+  bearer-authenticated adapter to the same Java/H2 garden. Preserve both boundaries.
 - `docs/adaptive-inspection-rules.md` is the contract for the implemented rule version.
 
 ## Core product principles
@@ -46,6 +49,8 @@ The product should eventually support:
 - Store the rule version with every generated recommendation.
 - Avoid botanical or diagnostic certainty when evidence is limited.
 - Keep the app useful when external identification services are unavailable.
+- Use plain customer-facing labels. A check reminder asks people to inspect soil; it must not
+  tell them to water automatically. Distinguish local saves, pending sync and server saves.
 
 ## Architectural guardrails
 
@@ -105,7 +110,7 @@ gradle test
 gradle build
 ```
 
-The repository currently has no Gradle wrapper. CI uses Gradle 8.14.3 with Java 21. If local
+The repository includes `apps/api/gradlew`; CI uses Java 21 and the pinned wrapper. If local
 versions are unavailable, run the same toolchain in Docker from the repository root:
 
 ```sh
