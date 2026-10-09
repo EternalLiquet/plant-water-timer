@@ -1,1 +1,1 @@
-{"name":"little-garden-checks","private":true,"version":"0.1.0","scripts":{"test":"node --test tests/*.test.mjs","test:browser":"node tests/browser-smoke.cjs"},"devDependencies":{"playwright":"1.62.1"}}
+{"name":"little-garden-checks","private":true,"version":"0.1.0","scripts":{"test":"node --test tests/*.test.mjs","test:browser":"node tests/browser-smoke.cjs","test:mobile-shell":"node tests/mobile-shell-smoke.cjs"},"devDependencies":{"playwright":"1.62.1"}}
