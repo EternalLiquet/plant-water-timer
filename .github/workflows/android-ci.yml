@@ -5,6 +5,9 @@ on:
       - 'apps/mobile/**'
       - 'apps/api/src/main/resources/static/**'
       - 'tests/mobile-assets.test.mjs'
+      - 'tests/mobile-shell-smoke.cjs'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/android-ci.yml'
   workflow_dispatch:
 permissions:
