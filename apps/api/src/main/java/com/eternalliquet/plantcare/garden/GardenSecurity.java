@@ -60,12 +60,17 @@ class GardenSecurity {
 
   @Bean
   SecurityFilterChain gardenSecurityFilter(HttpSecurity http) throws Exception {
-    return http.authorizeHttpRequests(
+    return http
+        .csrf(csrf -> csrf.ignoringRequestMatchers("/mcp"))
+        .authorizeHttpRequests(
             a ->
                 a.requestMatchers("/api/plants/**")
                     .denyAll()
                     .requestMatchers("/api/garden/**")
                     .authenticated()
+                    // MCP has its own required bearer credential, checked before JSON-RPC dispatch.
+                    .requestMatchers("/mcp")
+                    .permitAll()
                     .anyRequest()
                     .permitAll())
         .formLogin(
@@ -100,7 +105,11 @@ class GardenSecurity {
   }
 
   static UUID owner(Authentication auth) {
-    return UUID.nameUUIDFromBytes(("garden:" + auth.getName()).getBytes(StandardCharsets.UTF_8));
+    return ownerName(auth.getName());
+  }
+
+  static UUID ownerName(String username) {
+    return UUID.nameUUIDFromBytes(("garden:" + username).getBytes(StandardCharsets.UTF_8));
   }
 
   /** Bounded single-garden login limit; internet operators still need edge abuse protection. */
