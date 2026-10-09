@@ -286,7 +286,7 @@ class GardenService {
               owned(owner, id, true);
               UUID photoId = get(owner, id).photoId();
               for (String table :
-                  List.of("inspection_recommendations", "soil_observations", "watering_events"))
+                  List.of("mcp_write_receipts", "inspection_recommendations", "soil_observations", "watering_events"))
                 db.sql("DELETE FROM " + table + " WHERE plant_id=:id AND owner_id=:owner")
                     .param("id", id)
                     .param("owner", owner)

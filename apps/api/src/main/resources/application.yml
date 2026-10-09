@@ -17,6 +17,10 @@ app:
   password: ${GARDEN_PASSWORD:}
   photo-directory: ${PHOTO_DIRECTORY:./data/photos}
   identify-url: ${IDENTIFY_URL:http://127.0.0.1:8765/identify}
+  # Empty keeps the private MCP endpoint unavailable. Do not reuse another service's credential.
+  mcp:
+    bearer-token: ${MCP_BEARER_TOKEN:}
+    owner-username: ${MCP_OWNER_USERNAME:gardener}
   version: ${APP_VERSION:0.1.0-SNAPSHOT}
 
 management:
