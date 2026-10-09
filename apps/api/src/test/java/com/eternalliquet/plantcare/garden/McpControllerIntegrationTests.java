@@ -1,6 +1,7 @@
 package com.eternalliquet.plantcare.garden;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -88,6 +89,27 @@ class McpControllerIntegrationTests {
     assertThat(content.path("mimeType").asText()).isEqualTo("image/jpeg");
     assertThat(content.path("data").asText()).isEqualTo(Base64.getEncoder().encodeToString(image));
     assertThat(content.toString()).doesNotContain("/api/garden/photos/");
+  }
+
+  @Test
+  void mcpRequiresBearerAndIgnoresBrowserAndSpoofedOwnerContext() throws Exception {
+    var mine = create("Private fern");
+    String body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"get_plant\",\"arguments\":{\"plantId\":\"" + mine.id() + "\"}}}";
+    mvc.perform(post("/mcp").contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+    mvc.perform(post("/mcp").with(user("gardener")).contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+    mvc.perform(post("/mcp").header("Authorization", "Bearer wrong").contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+    var response = mvc.perform(post("/mcp").header("Authorization", "Bearer mcp-test-token").header("X-Owner-Id", OTHER_OWNER).contentType("application/json").content(body)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    assertThat(response).contains(mine.id().toString()).doesNotContain("Other owner's aloe");
+  }
+
+  @Test
+  void mcpRejectsForeignPlantAndRollsBackFailedWaterReceipt() throws Exception {
+    var foreign = createFor(OTHER_OWNER, "Other owner's aloe");
+    UUID request = UUID.randomUUID();
+    var response = call("log_watering", waterArguments(foreign.id(), LocalDate.of(2026, 1, 1), request));
+    assertThat(response.path("result").path("isError").asBoolean()).isTrue();
+    assertThat(db.sql("SELECT COUNT(*) FROM mcp_write_receipts WHERE request_id=:id").param("id", request).query(Long.class).single()).isZero();
+    assertThat(garden.history(OTHER_OWNER, foreign.id())).isEmpty();
   }
 
   @Test
