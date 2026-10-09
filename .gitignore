@@ -163,3 +163,10 @@ yarn-error.log*
 
 # Synthetic test output
 /test-artifacts/
+# Capacitor's copied web bundle and local Android build outputs
+apps/mobile/www/
+apps/mobile/node_modules/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+apps/mobile/android/local.properties
