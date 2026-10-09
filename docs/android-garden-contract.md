@@ -57,14 +57,30 @@ server confirms and every earlier command resolves. Server deletes also arrive a
 Receipts and tombstones need a documented retention/compaction rule before #18 ships; they
 cannot be dropped merely because a plant row was deleted.
 
-Watered today uses the plant's calendar day and one stable event ID per attempted save. The
-server admits at most one active event per plant/day, including independent browser/MCP taps.
-An accepted duplicate returns the existing event ID so the phone can map it. Undo references
-that exact event ID and is idempotent. If a same-day event was already undone, a fresh watering
-action may create a new event. Backdated watering does not move the latest care date backwards;
-the latest active event by calendar date determines it. The existing browser API already
-deduplicates active same-day watering, but a duplicate currently returns a plant without the
-existing event ID and its receipts do not survive deletion. #18 must close both gaps.
+Watered today uses the plant's calendar day and one stable proposed event ID per attempted save.
+The server admits at most one active event per plant/day, including independent browser/MCP taps.
+Its durable receipt records the request ID, matching event ID and outcome: **created** by this
+request or **deduplicated** against a pre-existing event. A deduplicated phone request is a no-op:
+the phone replaces its tentative event with the matching server event for display, but must not
+offer or queue Undo of that event as the inverse of the phone tap. Undo of a phone-created event
+references its confirmed ID and is idempotent. An explicit later Undo of an imported event needs
+its own user action and revision check; it is never inferred from a deduplicated receipt. If a
+same-day event was already undone, a fresh watering action may create a new event. After a lost
+response, reconcile or retry the **same** request ID and payload to learn its recorded outcome
+before enabling Undo; never guess from the current plant summary or issue an inverse command.
+Backdated watering does not move the latest care date backwards; the latest active event by
+calendar date determines it. The existing browser API already deduplicates active same-day
+watering, but a duplicate currently returns only a plant. Its `lastEventId` names the latest
+active event, which may belong to a different date than a backdated duplicate. It does not
+provide the matching event ID, created-versus-deduplicated outcome, or a deletion-safe receipt.
+#18 must close these gaps.
+
+Required #18 tests use synthetic data: (1) browser/MCP records today's event B before phone
+request A arrives; A returns `deduplicated(B)` and phone Undo of A cannot remove B; (2) the
+server creates A but its response is lost; retry of A returns `created(A)` and one later Undo
+undoes A once; (3) the plant's latest event is on the 9th but a phone request for the 7th
+deduplicates; its receipt names the 7th's event, never `lastEventId` from the 9th, and the last
+care date remains the 9th. Test the same outcomes across app restart and remote deletion.
 
 Revisions are monotonic per server plant, changed for browser, phone and MCP mutations. Import
 captures a base revision. A stale edit or delete must return conflict with current server data;
