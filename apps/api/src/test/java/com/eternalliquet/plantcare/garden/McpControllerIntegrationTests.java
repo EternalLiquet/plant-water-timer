@@ -10,7 +10,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,6 +91,51 @@ class McpControllerIntegrationTests {
   }
 
   @Test
+  void mcpWaterReceiptSurvivesDailyNoOpAndUndo() throws Exception {
+    var plant = create("Receipt fern");
+    LocalDate date = LocalDate.of(2026, 1, 1);
+    UUID first = UUID.randomUUID();
+    UUID second = UUID.randomUUID();
+    garden.water(OWNER, plant.id(), new GardenService.WaterRequest(first, date, "UTC"));
+
+    String retryableNoOp = waterArguments(plant.id(), date, second);
+    call("log_watering", retryableNoOp);
+    garden.undo(OWNER, plant.id(), first);
+    call("log_watering", retryableNoOp);
+
+    assertThat(garden.history(OWNER, plant.id())).hasSize(1);
+    assertThat(garden.history(OWNER, plant.id()).get(0).undone()).isTrue();
+  }
+
+  @Test
+  void mcpWaterRejectsRequestIdReusedWithDifferentPayload() throws Exception {
+    var plant = create("Conflict fern");
+    UUID request = UUID.randomUUID();
+    call("log_watering", waterArguments(plant.id(), LocalDate.of(2026, 1, 1), request));
+
+    var response = call("log_watering", waterArguments(plant.id(), LocalDate.of(2026, 1, 2), request));
+
+    assertThat(response.path("result").path("isError").asBoolean()).isTrue();
+    assertThat(response.toString()).contains("different details");
+  }
+
+  @Test
+  void concurrentDuplicateNoOpWaterRequestsCreateOneReceiptAndNoNewEvent() throws Exception {
+    var plant = create("Concurrent fern");
+    LocalDate date = LocalDate.of(2026, 1, 1);
+    UUID original = UUID.randomUUID();
+    UUID request = UUID.randomUUID();
+    garden.water(OWNER, plant.id(), new GardenService.WaterRequest(original, date, "UTC"));
+    String args = waterArguments(plant.id(), date, request);
+    try (var executor = Executors.newFixedThreadPool(2)) {
+      var futures = executor.invokeAll(List.of((Callable<JsonNode>) () -> call("log_watering", args), () -> call("log_watering", args)));
+      for (var future : futures) assertThat(future.get(10, TimeUnit.SECONDS).path("result").path("isError").asBoolean()).isFalse();
+    }
+    assertThat(garden.history(OWNER, plant.id())).hasSize(1);
+    assertThat(db.sql("SELECT COUNT(*) FROM mcp_write_receipts WHERE operation='log_watering' AND request_id=:id").param("id", request).query(Long.class).single()).isEqualTo(1);
+  }
+
+  @Test
   void confirmedNameCreateAndWaterWritesAreValidatedAndRetrySafe() throws Exception {
     var existing = create("Fern");
     var nameRequest = UUID.randomUUID();
@@ -124,6 +173,20 @@ class McpControllerIntegrationTests {
 
     call("confirm_plant_name", "{\"plantId\":\"" + existing.id() + "\",\"confirmedName\":\" \",\"requestId\":\"" + UUID.randomUUID() + "\"}");
     assertThat(garden.get(OWNER, existing.id()).name()).isEqualTo("Hall fern");
+  }
+
+  private String waterArguments(UUID plantId, LocalDate date, UUID requestId) {
+    return "{\"plantId\":\""
+        + plantId
+        + "\",\"date\":\""
+        + date
+        + "\",\"requestId\":\""
+        + requestId
+        + "\"}";
+  }
+
+  private String waterArguments(UUID plantId, LocalDate date) {
+    return waterArguments(plantId, date, UUID.randomUUID());
   }
 
   private GardenService.Plant create(String name) {

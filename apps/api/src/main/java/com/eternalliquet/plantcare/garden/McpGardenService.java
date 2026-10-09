@@ -32,6 +32,8 @@ class McpGardenService {
   private final UUID owner;
   private final Object[] nameLocks =
       java.util.stream.IntStream.range(0, 64).mapToObj(i -> new Object()).toArray();
+  private final Object[] waterLocks =
+      java.util.stream.IntStream.range(0, 64).mapToObj(i -> new Object()).toArray();
 
   McpGardenService(
       GardenService garden,
@@ -147,7 +149,39 @@ class McpGardenService {
     } catch (java.time.format.DateTimeParseException invalid) {
       throw new IllegalArgumentException("date must be an ISO-8601 calendar date.");
     }
-    return garden.water(owner, plantId, new GardenService.WaterRequest(requestId, date, null));
+    String fingerprint = waterFingerprint(plantId, date);
+    Object lock = waterLocks[Math.floorMod(java.util.Objects.hash(owner, requestId), waterLocks.length)];
+    synchronized (lock) {
+      return transactions.execute(
+          status -> {
+            var receipt =
+                db.sql(
+                        "SELECT plant_id,fingerprint FROM mcp_write_receipts WHERE owner_id=:owner"
+                            + " AND operation='log_watering' AND request_id=:request FOR UPDATE")
+                    .param("owner", owner)
+                    .param("request", requestId)
+                    .query((r, n) -> List.of(r.getObject("plant_id", UUID.class), r.getString("fingerprint")))
+                    .optional();
+            if (receipt.isPresent()) {
+              if (!receipt.get().equals(List.of(plantId, fingerprint))) {
+                throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "This requestId was already used with different details.");
+              }
+              return garden.get(owner, plantId);
+            }
+            var plant = garden.water(owner, plantId, new GardenService.WaterRequest(requestId, date, null));
+            db.sql(
+                    "INSERT INTO mcp_write_receipts(owner_id,operation,request_id,plant_id,fingerprint,created_at)"
+                        + " VALUES(:owner,'log_watering',:request,:plant,:fingerprint,:created)")
+                .param("owner", owner)
+                .param("request", requestId)
+                .param("plant", plantId)
+                .param("fingerprint", fingerprint)
+                .param("created", clock.instant())
+                .update();
+            return plant;
+          });
+    }
   }
 
   private GardenService.Plant confirmName(JsonNode args) {
@@ -265,6 +299,19 @@ class McpGardenService {
 
   private static void validateName(String name) {
     if (name.strip().length() > 100) throw new IllegalArgumentException("confirmedName must be at most 100 characters.");
+  }
+
+  private static String waterFingerprint(UUID plantId, LocalDate date) {
+    try {
+      var bytes = new ByteArrayOutputStream();
+      var data = new DataOutputStream(bytes);
+      data.writeUTF("mcp-log-watering-v1");
+      data.writeUTF(plantId.toString());
+      data.writeUTF(date.toString());
+      return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()));
+    } catch (IOException | java.security.NoSuchAlgorithmException impossible) {
+      throw new IllegalStateException(impossible);
+    }
   }
 
   private static String fingerprint(UUID plantId, String name) {
