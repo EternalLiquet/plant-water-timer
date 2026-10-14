@@ -1,6 +1,7 @@
 import {cpSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
+import {build} from 'esbuild';
 
 const mobile = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const staticDir = resolve(mobile, '../api/src/main/resources/static');
@@ -22,4 +23,5 @@ for (const [before, after] of [
   html = html.replace(before, after);
 }
 writeFileSync(resolve(output, 'index.html'), html);
-cpSync(resolve(mobile, 'native-shell.js'), resolve(output, 'native-shell.js'));
+await build({entryPoints: [resolve(mobile, 'native-shell.js')], outfile: resolve(output, 'native-shell.js'),
+  bundle: true, format: 'esm', platform: 'browser', target: 'es2022'});

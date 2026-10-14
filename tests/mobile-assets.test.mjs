@@ -14,7 +14,8 @@ test('Android asset step bundles the existing UI into an offline shell', () => {
   assert.match(index, /id="plant-template"/);
   assert.match(index, /native-shell\.js/);
   assert.doesNotMatch(index, /src="\/app\.js"|rel="manifest"/);
-  assert.doesNotMatch(shell, /fetch\(|serviceWorker\.register|\/api\/|https?:\/\//);
+  assert.doesNotMatch(readFileSync('apps/mobile/native-shell.js', 'utf8'), /fetch\(|serviceWorker\.register|\/api\/|https?:\/\//);
+  assert.doesNotMatch(readFileSync('apps/mobile/garden-store.mjs', 'utf8'), /fetch\(|serviceWorker\.register|\/api\/|https?:\/\//);
   assert.equal(existsSync(root + 'sw.js'), false);
   assert.equal(existsSync(root + 'manifest.webmanifest'), false);
   assert.equal(JSON.parse(config).server, undefined);

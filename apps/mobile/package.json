@@ -8,10 +8,12 @@
     "apk:debug": "npm run sync && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "8.1.1",
     "@capacitor/android": "8.5.3",
     "@capacitor/core": "8.5.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.5.3"
+    "@capacitor/cli": "8.5.3",
+    "esbuild": "0.28.2"
   }
 }
