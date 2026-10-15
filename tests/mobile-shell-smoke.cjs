@@ -182,6 +182,7 @@ async function photoManualJourney(context) {
   await page.locator('#add-open').click();
   assert.equal(await page.locator('#photo').isVisible(), true);
   await page.locator('#photo').setInputFiles(path.resolve(__dirname, 'fixtures/synthetic-plant.png'));
+  await page.waitForFunction(() => { const image = document.getElementById('photo-preview'); return image.complete && image.naturalWidth > 0; });
   assert.equal(await page.locator('#photo-preview').isVisible(), true);
   assert.match(await page.locator('#photo-message').textContent(), /type a name/);
   assert.equal(await page.locator('#plant-name').inputValue(), '');
@@ -197,6 +198,7 @@ async function photoManualJourney(context) {
   await page.waitForFunction(() => !document.getElementById('add-dialog').open);
   assert.equal(await page.locator('.plant-name').textContent(), 'Confirmed fern');
   assert.equal(await page.locator('.plant .species').textContent(), 'My manual plant type');
+  await page.waitForFunction(() => { const image = document.querySelector('.plant img'); return image?.complete && image.naturalWidth > 0; });
   assert.equal(await page.locator('.plant img').isVisible(), true);
   await page.locator('#add-open').click();
   assert.equal(await page.locator('#photo-preview').isVisible(), false);
