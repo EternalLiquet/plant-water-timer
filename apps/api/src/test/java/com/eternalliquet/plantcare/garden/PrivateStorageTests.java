@@ -24,6 +24,8 @@ class PrivateStorageTests {
         Files.createDirectory(
             temporary.resolve("shared"),
             PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
+    // Creation attributes are masked by the process umask; explicitly establish this test fixture.
+    Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rwxr-xr-x"));
     assertThatThrownBy(() -> PrivateStorage.ensureDirectory(path))
         .isInstanceOf(IllegalStateException.class);
     assertThat(Files.getPosixFilePermissions(path))

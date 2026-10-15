@@ -42,8 +42,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install chromium
       - run: npm run test:mobile-shell
+      - run: npm test
       - run: npm run apk:debug
         working-directory: apps/mobile
+      - run: ./gradlew testDebugUnitTest
+        working-directory: apps/mobile/android
       - uses: actions/upload-artifact@v4
         with:
           name: little-garden-android-debug-${{ github.event.pull_request.head.sha || github.sha }}

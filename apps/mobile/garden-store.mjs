@@ -1,4 +1,4 @@
-// Phone-only schema v1. No server identity, sync receipt, or migration of browser data is implied.
+// Phone-only schema; v1 is the base, v2 adds private photo references. No server identity, sync receipt, or migration of browser data is implied.
 const schema = `
 CREATE TABLE plants (
   id TEXT PRIMARY KEY,
@@ -27,7 +27,7 @@ function invalidPlant(message) {
   return Object.assign(new Error(message), {code: 'invalid-plant'});
 }
 
-function validatePlant({name, species, intervalDays, zone}) {
+function validatePlant({name, species, intervalDays, zone, photoId = null}) {
   const trimmed = name?.trim();
   if (!trimmed || trimmed.length > 100 || (species || '').length > 100 ||
       !Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 365) {
@@ -36,7 +36,11 @@ function validatePlant({name, species, intervalDays, zone}) {
   if (typeof zone !== 'string' || !zone) throw invalidPlant('Choose a valid plant time zone.');
   try { new Intl.DateTimeFormat('en', {timeZone: zone}); }
   catch { throw invalidPlant('Choose a valid plant time zone.'); }
-  return {name: trimmed, species: (species || '').trim(), intervalDays, zone};
+  if (photoId !== null && (typeof photoId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(photoId))) {
+    throw invalidPlant('Choose a photo again.');
+  }
+  return {name: trimmed, species: (species || '').trim(), intervalDays, zone, photoId};
 }
 
 // The native plugin keeps connections across WebView reloads, so a fresh page must sync with it
@@ -65,8 +69,10 @@ async function transaction(db, action) {
 export async function openGardenStore(db) {
   await db.execute('PRAGMA foreign_keys = ON;', false);
   const version = Number((await db.query('PRAGMA user_version;')).values[0]?.user_version ?? 0);
-  if (version > 1) throw new Error('This garden was saved by a newer app version.');
+  if (version > 2) throw new Error('This garden was saved by a newer app version.');
   if (version === 0) await transaction(db, () => db.execute(schema, false));
+  if (version < 2) await transaction(db, () => db.execute(
+    'ALTER TABLE plants ADD COLUMN photo_id TEXT; PRAGMA user_version = 2;', false));
   // One connection serves every call, so a read issued while a write transaction is open would see
   // its uncommitted rows. Every operation, reads included, runs in this queue one at a time. Queued
   // actions use the connection directly and never call back into the store, so they cannot wait
@@ -82,18 +88,18 @@ export async function openGardenStore(db) {
       return serialized(async () => {
         const plant = validatePlant(input);
         const id = crypto.randomUUID();
-        await db.run('INSERT INTO plants(id, name, species, interval_days, zone) VALUES (?, ?, ?, ?, ?)',
-          [id, plant.name, plant.species, plant.intervalDays, plant.zone], false);
+        await db.run('INSERT INTO plants(id, name, species, interval_days, zone, photo_id) VALUES (?, ?, ?, ?, ?, ?)',
+          [id, plant.name, plant.species, plant.intervalDays, plant.zone, plant.photoId], false);
         return {id, ...plant};
       });
     },
     async listPlants() {
       return serialized(async () => {
-        const rows = (await db.query(`SELECT p.id, p.name, p.species, p.interval_days, p.zone,
+        const rows = (await db.query(`SELECT p.id, p.name, p.species, p.interval_days, p.zone, p.photo_id,
           MAX(w.watered_on) AS last_watered FROM plants p LEFT JOIN waterings w ON w.plant_id = p.id
           GROUP BY p.id ORDER BY p.name COLLATE NOCASE, p.id`)).values;
         return rows.map(row => ({id: row.id, name: row.name, species: row.species,
-          intervalDays: row.interval_days, zone: row.zone, lastWatered: row.last_watered}));
+          intervalDays: row.interval_days, zone: row.zone, photoId: row.photo_id, lastWatered: row.last_watered}));
       });
     },
     async recordWatering(plantId, date) {

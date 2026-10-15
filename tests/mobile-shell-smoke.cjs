@@ -9,6 +9,20 @@ const appUrl = 'http://app.local/index.html';
 // Runs in the page before the bundle. Test hooks: __failNextWatering makes the next watering throw;
 // __holdNextCreate makes the next createPlant wait until __finishCreate(true | false) is called.
 function installTestStore() {
+  const photos = new Map();
+  window.__gardenTestPhotos = {
+    async save({data}) {
+      if (window.__failPhoto) throw new Error("photo write failed");
+      const photoId = `e6bd3c38-a1ac-4bfa-b91d-${String(photos.size + 1).padStart(12, '0')}`; photos.set(photoId, data); return {photoId};
+    },
+    async read({photoId}) {
+      if (window.__holdPhotoRead) {
+        window.__holdPhotoRead = false;
+        await new Promise(resolve => { window.__finishPhotoRead = resolve; });
+      }
+      return {data: photos.get(photoId)};
+    }
+  };
   const plants = [];
   const waterings = [];
   window.__gardenTestStore = {
@@ -162,6 +176,63 @@ async function wateringReopensOnTheNextPlantDay(browser) {
   await context.close();
 }
 
+async function photoManualJourney(context) {
+  const page = await context.newPage();
+  await page.goto(appUrl);
+  await page.locator('#add-open').click();
+  assert.equal(await page.locator('#photo').isVisible(), true);
+  await page.locator('#photo').setInputFiles(path.resolve(__dirname, 'fixtures/synthetic-plant.png'));
+  await page.waitForFunction(() => { const image = document.getElementById('photo-preview'); return image.complete && image.naturalWidth > 0; });
+  assert.equal(await page.locator('#photo-preview').isVisible(), true);
+  assert.match(await page.locator('#photo-message').textContent(), /type a name/);
+  assert.equal(await page.locator('#plant-name').inputValue(), '');
+  assert.equal(await page.locator('.plant').count(), 0, 'choosing a photo cannot save a plant');
+  await page.locator('#plant-name').fill('Confirmed fern');
+  await page.locator('#species').fill('My manual plant type');
+  await page.evaluate(() => { window.__failPhoto = true; });
+  await page.locator('#save-plant').click();
+  await page.waitForFunction(() => /photo.*not saved/i.test(document.getElementById('form-message').textContent));
+  assert.equal(await page.locator('.plant').count(), 0, 'failed photo must not silently save without it');
+  await page.evaluate(() => { window.__failPhoto = false; });
+  await page.locator('#save-plant').click();
+  await page.waitForFunction(() => !document.getElementById('add-dialog').open);
+  assert.equal(await page.locator('.plant-name').textContent(), 'Confirmed fern');
+  assert.equal(await page.locator('.plant .species').textContent(), 'My manual plant type');
+  await page.waitForFunction(() => { const image = document.querySelector('.plant img'); return image?.complete && image.naturalWidth > 0; });
+  assert.equal(await page.locator('.plant img').isVisible(), true);
+  await page.locator('#add-open').click();
+  assert.equal(await page.locator('#photo-preview').isVisible(), false);
+  await page.locator('#photo').setInputFiles({name: 'invalid.jpg', mimeType: 'text/plain', buffer: Buffer.from('bad')});
+  await page.locator('#plant-name').fill('No photo');
+  await page.locator('#save-plant').click();
+  assert.equal(await page.locator('.plant').count(), 1);
+  await page.locator('#remove-photo').click();
+  await page.locator('#save-plant').click();
+  await page.waitForFunction(() => !document.getElementById('add-dialog').open);
+  assert.equal(await page.locator('.plant').count(), 2);
+  await page.close();
+}
+
+async function overlappingPhotoRendersShowOnlyLatestGarden(context) {
+  const page = await context.newPage();
+  await page.goto(appUrl);
+  await page.locator('#add-open').click();
+  await page.locator('#photo').setInputFiles(path.resolve(__dirname, 'fixtures/synthetic-plant.png'));
+  await page.locator('#plant-name').fill('Photo plant');
+  await page.locator('#save-plant').click();
+  await page.waitForFunction(() => document.querySelectorAll('.plant').length === 1);
+  await page.evaluate(() => { window.__holdPhotoRead = true; });
+  await addPlant(page, 'Second plant');
+  await page.waitForFunction(() => window.__finishPhotoRead);
+  await addPlant(page, 'Third plant');
+  await page.waitForFunction(() => document.querySelectorAll('.plant').length === 3);
+  await page.evaluate(() => window.__finishPhotoRead());
+  // A later store read queues behind both writes; allow the released render to complete.
+  await page.evaluate(async () => { await window.__gardenTestStore.listPlants(); await new Promise(r => setTimeout(r, 0)); });
+  assert.deepEqual(await page.locator('.plant-name').allTextContents(), ['Photo plant', 'Second plant', 'Third plant']);
+  await page.close();
+}
+
 async function main() {
   const browser = await chromium.launch({
     headless: true,
@@ -169,6 +240,8 @@ async function main() {
   });
   try {
     const context = await newAppContext(browser);
+    await overlappingPhotoRendersShowOnlyLatestGarden(context);
+    await photoManualJourney(context);
     await careJourney(context);
     await changedUiShowsOpenError(context);
     await earlierSaveLeavesNewerFormAlone(context, true);
