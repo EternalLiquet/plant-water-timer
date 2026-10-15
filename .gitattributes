@@ -1,2 +1,4 @@
 # The generated Windows Gradle launcher intentionally uses CRLF.
 apps/api/gradlew.bat whitespace=cr-at-eol
+# POSIX launchers break with CRLF, even on Windows checkouts used from WSL or Git Bash.
+apps/mobile/android/gradlew text eol=lf

@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
+import {nativeIndexHtml} from '../apps/mobile/scripts/native-index.mjs';
+
+test('Android asset step accepts a Windows CRLF checkout of the web UI', () => {
+  const source = readFileSync('apps/api/src/main/resources/static/index.html', 'utf8')
+    .replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+  const index = nativeIndexHtml(source);
+  assert.match(index, /src="\.\/native-shell\.js"/);
+  assert.doesNotMatch(index, /rel="manifest"/);
+});
 
 test('Android asset step bundles the existing UI into an offline shell', () => {
   execFileSync(process.execPath, ['apps/mobile/scripts/build-web.mjs']);
