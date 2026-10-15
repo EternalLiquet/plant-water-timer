@@ -1,16 +1,16 @@
-# Android offline care draft (stacked on #20 and #21)
+# Android offline care and local photos
 
 This Capacitor app bundles the garden UI and uses a private on-phone SQLite database. In this
-slice you can add a named plant and record one watering per plant calendar day. The card shows
+slice you can choose a photo, explicitly name the plant and save it and record one watering per plant calendar day. The card shows
 the latest watering and History shows saved dates. The app says “Saved on this phone” after a
 successful write; it makes no server-save claim. Check the soil and decide whether to water.
 
-The local schema starts at version 1. Plants have stable UUIDs, a plant time zone and a check
+The local schema is version 2; a transactional migration adds a nullable photo reference to version 1. Plants have stable UUIDs, a plant time zone and a check
 interval; watering records have UUIDs and calendar dates. Duplicate same-day taps reuse the
 existing record. Dates are interpreted in the plant's stored time zone. A failed schema upgrade
 or storage open stops care actions and displays an error without clearing the database.
 
-This is deliberately smaller than issue #16's complete offline garden: photo storage, edits,
+This is deliberately smaller than issue #16's complete offline garden: online identification, edits,
 Undo, delete, outbox, sync, server pairing, reminders and migration from another garden remain
 for later reviewed slices. There is no network garden connection. Android backup remains disabled,
 so uninstalling or clearing app storage removes this phone's records. Debug APKs from different
@@ -46,3 +46,30 @@ prove phone runtime behavior. No phone installation is part of this PR.
 The application ID remains `com.eternalliquet.littlegarden`. The CI APK is debug signed and is
 not a release. Keep the same application ID and signing key for any future data-preserving
 update; no release key is created here.
+
+## Local photo prerequisite for identification
+
+Choose a JPG or PNG up to 5 MiB and 20 megapixels, type the name/type yourself, then press
+Save plant. Choosing a photo never identifies or saves a plant automatically. Online identification
+is visibly unavailable; manual naming works offline. No photo or name is sent to a server.
+The existing backend remains the intended identification provider, but its private deployment
+alone does not establish native cookie/CSRF transport. Before connecting it, complete the trusted
+HTTPS origin, redirects, cookie/session expiry, CSRF and sign-out tests in
+`docs/android-garden-contract.md`. Do not add a bearer token or weaken the web security boundary.
+
+A small native bridge checks file size, signature, decoded format and dimensions, downsamples to
+at most 2048 pixels on the longest side, applies JPEG orientation, and re-encodes pixels to JPEG
+without copying EXIF/GPS or the original filename. Files live under private app storage; SQLite
+stores only generated UUID references. The same application ID and signing key are still required
+for data-preserving updates. Uninstall/clear-data still removes photos and care records.
+
+The photo file is written before the plant reference. A photo write failure leaves the form open
+and never silently saves without it. If the database write then fails ambiguously, keep the file:
+deleting it could remove a photo referenced by a successful but unacknowledged write. Such files
+and interrupted-process temporary files may remain private and unused; cleanup/export is deferred.
+No existing files or care records are deleted. A missing photo does not block watering/history.
+
+Node tests cover v1 migration rollback and preserved history/references; the offline browser smoke
+uses a synthetic native photo bridge. Java unit tests cover native input limits and reference
+validation. Bitmap encoding, metadata stripping, orientation and native file persistence still need
+Android runtime/device checks; browser tests do not prove those. No device installation is performed.

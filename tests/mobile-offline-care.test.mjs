@@ -181,8 +181,56 @@ test('a newer local schema is rejected without erasing records', async () => {
   try {
     const store = await openGardenStore(db);
     await store.createPlant({name: 'Fern', species: '', intervalDays: 7, zone: 'UTC'});
-    await db.execute('PRAGMA user_version = 2;');
+    await db.execute('PRAGMA user_version = 3;');
     await assert.rejects(openGardenStore(db), /newer app version/);
     assert.equal((await db.query('SELECT count(*) AS total FROM plants')).values[0].total, 1);
+  } finally { db.close(); }
+});
+
+test('photo references survive restart alongside existing plants and watering history', async () => {
+  const db = sqliteAdapter(':memory:');
+  try {
+    const original = await openGardenStore(db);
+    const old = await original.createPlant({name: 'Old fern', species: '', intervalDays: 7, zone: 'UTC'});
+    await original.recordWatering(old.id, '2026-10-14');
+    const photoId = 'e6bd3c38-a1ac-4bfa-b91d-dbf541915d9c';
+    await original.createPlant({name: 'New fern', species: '', intervalDays: 7, zone: 'UTC', photoId});
+    const reopened = await openGardenStore(db);
+    const plants = await reopened.listPlants();
+    assert.equal(plants.find(p => p.name === 'New fern').photoId, photoId);
+    assert.equal(plants.find(p => p.id === old.id).photoId, null);
+    assert.equal(plants.find(p => p.id === old.id).lastWatered, '2026-10-14');
+  } finally { db.close(); }
+});
+
+test('photo references cannot contain file paths or remote URLs', async () => {
+  const db = sqliteAdapter(':memory:');
+  try {
+    const store = await openGardenStore(db);
+    for (const photoId of ['../garden.db', 'https://example.test/photo', '', 42]) {
+      await assert.rejects(store.createPlant({name: 'Fern', species: '', intervalDays: 7, zone: 'UTC', photoId}),
+        error => error.code === 'invalid-plant');
+    }
+    assert.deepEqual(await store.listPlants(), []);
+  } finally { db.close(); }
+});
+
+test('upgrading a version 1 garden preserves rows and rolls back a failed photo migration', async () => {
+  const db = sqliteAdapter(':memory:');
+  try {
+    await db.execute(`CREATE TABLE plants(id TEXT PRIMARY KEY, name TEXT, species TEXT, interval_days INTEGER, zone TEXT);
+      CREATE TABLE waterings(id TEXT PRIMARY KEY, plant_id TEXT, watered_on TEXT, recorded_at TEXT);
+      INSERT INTO plants VALUES ('old', 'Fern', '', 7, 'UTC');
+      INSERT INTO waterings VALUES ('event', 'old', '2026-10-14', '2026-10-14T12:00:00Z');
+      PRAGMA user_version = 1;`);
+    db.beforeCommit = () => { throw new Error('disk full'); };
+    await assert.rejects(openGardenStore(db), /disk full/);
+    assert.equal((await db.query('PRAGMA user_version')).values[0].user_version, 1);
+    assert.equal((await db.query('PRAGMA table_info(plants)')).values.some(c => c.name === 'photo_id'), false);
+    db.beforeCommit = null;
+    const store = await openGardenStore(db);
+    assert.deepEqual(await store.listPlants(), [{id: 'old', name: 'Fern', species: '', intervalDays: 7,
+      zone: 'UTC', photoId: null, lastWatered: '2026-10-14'}]);
+    assert.equal((await store.listWaterings('old'))[0].id, 'event');
   } finally { db.close(); }
 });
