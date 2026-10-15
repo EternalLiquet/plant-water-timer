@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci --ignore-scripts
+        working-directory: apps/mobile
       - run: node --test tests/*.test.mjs
       - run: node --check apps/api/src/main/resources/static/app.js
   identification-boundary:

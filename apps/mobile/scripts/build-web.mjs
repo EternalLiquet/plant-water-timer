@@ -1,6 +1,7 @@
 import {cpSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
+import {build} from 'esbuild';
 import {nativeIndexHtml} from './native-index.mjs';
 
 const mobile = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -13,4 +14,5 @@ for (const file of ['style.css', 'icon-192.png', 'icon-512.png', 'garden-utils.m
 }
 const html = nativeIndexHtml(readFileSync(resolve(staticDir, 'index.html'), 'utf8'));
 writeFileSync(resolve(output, 'index.html'), html);
-cpSync(resolve(mobile, 'native-shell.js'), resolve(output, 'native-shell.js'));
+await build({entryPoints: [resolve(mobile, 'native-shell.js')], outfile: resolve(output, 'native-shell.js'),
+  bundle: true, format: 'esm', platform: 'browser', target: 'es2022'});
