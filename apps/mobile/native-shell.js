@@ -1,30 +1,41 @@
-import {openGardenStore, localDate} from './garden-store.mjs';
+import {openGardenStore, localDate, connectGardenDatabase} from './garden-store.mjs';
 
 const byId = id => document.getElementById(id);
-byId('garden').hidden = false;
-byId('help-open').hidden = true;
-byId('sign-out').hidden = true;
-byId('install').hidden = true;
-byId('add-open').hidden = false;
-byId('empty').querySelector('p').textContent = 'Add a name to start caring for your first plant on this phone.';
-byId('care-summary').textContent = 'Opening the garden on this phone…';
-byId('page-message').textContent = '';
-document.querySelector('.heading .muted').textContent = 'Check the soil before watering. Your plants and watering notes are saved on this phone.';
-byId('add-dialog').querySelector('.photo-picker').hidden = true;
-byId('last-watered').previousElementSibling.hidden = true;
-byId('last-watered').hidden = true;
-byId('last-watered').nextElementSibling.hidden = true;
-byId('past-form').hidden = true;
-byId('interval').parentElement.previousElementSibling.hidden = true;
-byId('interval').parentElement.hidden = true;
-byId('interval').parentElement.nextElementSibling.hidden = true;
+
+function present(element, description) {
+  if (!element) throw new Error(`Source UI changed: missing ${description}`);
+  return element;
+}
+
+// Hides a web-only form field together with its label and help text.
+function hideField(id) {
+  const input = present(byId(id), `#${id}`);
+  const row = input.closest('.number-unit') || input;
+  const help = row.nextElementSibling?.matches('p.small') ? row.nextElementSibling : null;
+  for (const element of [present(document.querySelector(`label[for="${id}"]`), `label for #${id}`), row,
+    present(help, `help text for #${id}`)]) {
+    element.hidden = true;
+  }
+}
+
+function prepareNativeUi() {
+  present(byId('garden'), '#garden').hidden = false;
+  present(byId('help-open'), '#help-open').hidden = true;
+  present(byId('sign-out'), '#sign-out').hidden = true;
+  present(byId('install'), '#install').hidden = true;
+  present(byId('add-open'), '#add-open').hidden = false;
+  present(byId('empty')?.querySelector('p'), '#empty text').textContent = 'Add a name to start caring for your first plant on this phone.';
+  byId('care-summary').textContent = 'Opening the garden on this phone…';
+  present(document.querySelector('.heading .muted'), 'heading text').textContent = 'Check the soil before watering. Your plants and watering notes are saved on this phone.';
+  present(byId('add-dialog')?.querySelector('.photo-picker'), 'photo picker').hidden = true;
+  hideField('last-watered');
+  hideField('interval');
+  present(byId('past-form'), '#past-form').hidden = true;
+}
 
 async function openNativeStore() {
   const {CapacitorSQLite, SQLiteConnection} = await import('@capacitor-community/sqlite');
-  const connection = new SQLiteConnection(CapacitorSQLite);
-  const database = await connection.createConnection('little-garden', false, 'no-encryption', 1, false);
-  await database.open();
-  return openGardenStore(database);
+  return openGardenStore(await connectGardenDatabase(new SQLiteConnection(CapacitorSQLite)));
 }
 
 function showMessage(message, error = false) {
@@ -58,7 +69,9 @@ async function start(store) {
         try {
           result = await store.recordWatering(plant.id, localDate(plant.zone));
         } catch {
-          showMessage('I couldn’t confirm the watering. Reopen the app and check History before trying again.', true);
+          // Same-day waterings are deduplicated, so retrying cannot record this one twice.
+          showMessage('I couldn’t confirm the watering was saved. Tap Watered today again; it won’t be counted twice.', true);
+          water.disabled = false;
           return;
         }
         try {
@@ -111,8 +124,7 @@ async function start(store) {
         zone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
       });
     } catch (error) {
-      const validation = error.message === 'Enter a plant name and a check interval from 1 to 365 days.';
-      byId('form-message').textContent = validation ? 'Enter a plant name to continue.' :
+      byId('form-message').textContent = error.code === 'invalid-plant' ? 'Enter a plant name to continue.' :
         'I couldn’t confirm this plant was saved. Reopen the app and check the list before trying again.';
       save.disabled = false;
       return;
@@ -130,8 +142,10 @@ async function start(store) {
 }
 
 try {
+  prepareNativeUi();
   await start(globalThis.__gardenTestStore || await openNativeStore());
-} catch {
+} catch (error) {
+  console.error('Little Garden could not open the phone garden', error);
   byId('care-summary').textContent = 'The phone garden could not open';
   showMessage('I couldn’t open your saved plants. Please close and reopen the app; your records were not erased.', true);
   byId('add-open').disabled = true;

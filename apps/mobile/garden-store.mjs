@@ -23,16 +23,31 @@ function validDate(value) {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
 }
 
+function invalidPlant(message) {
+  return Object.assign(new Error(message), {code: 'invalid-plant'});
+}
+
 function validatePlant({name, species, intervalDays, zone}) {
   const trimmed = name?.trim();
   if (!trimmed || trimmed.length > 100 || (species || '').length > 100 ||
       !Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 365) {
-    throw new Error('Enter a plant name and a check interval from 1 to 365 days.');
+    throw invalidPlant('Enter a plant name and a check interval from 1 to 365 days.');
   }
-  if (typeof zone !== 'string' || !zone) throw new Error('zone');
+  if (typeof zone !== 'string' || !zone) throw invalidPlant('Choose a valid plant time zone.');
   try { new Intl.DateTimeFormat('en', {timeZone: zone}); }
-  catch { throw new Error('Choose a valid plant time zone.'); }
+  catch { throw invalidPlant('Choose a valid plant time zone.'); }
   return {name: trimmed, species: (species || '').trim(), intervalDays, zone};
+}
+
+// The native plugin keeps connections across WebView reloads, so a fresh page must sync with it
+// before creating one; otherwise createConnection fails with "already exists".
+export async function connectGardenDatabase(sqlite, name = 'little-garden') {
+  const consistent = (await sqlite.checkConnectionsConsistency()).result;
+  const known = (await sqlite.isConnection(name, false)).result;
+  const database = consistent && known ? await sqlite.retrieveConnection(name, false) :
+    await sqlite.createConnection(name, false, 'no-encryption', 1, false);
+  if (!(await database.isDBOpen()).result) await database.open();
+  return database;
 }
 
 async function transaction(db, action) {

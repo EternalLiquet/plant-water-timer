@@ -4,7 +4,57 @@ import {DatabaseSync} from 'node:sqlite';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {openGardenStore, localDate} from '../apps/mobile/garden-store.mjs';
+import {openGardenStore, localDate, connectGardenDatabase} from '../apps/mobile/garden-store.mjs';
+
+// Mirrors @capacitor-community/sqlite: native connections outlive a WebView reload, while the JS
+// SQLiteConnection wrapper starts empty. Consistency checks close native connections JS does not know.
+function fakeSqlitePlugin(nativeConnections) {
+  const known = new Map();
+  return {
+    async checkConnectionsConsistency() {
+      const consistent = [...nativeConnections].every(name => known.has(name));
+      if (!consistent) { nativeConnections.clear(); known.clear(); }
+      return {result: consistent};
+    },
+    async isConnection(name) { return {result: known.has(name)}; },
+    async retrieveConnection(name) { return known.get(name); },
+    async createConnection(name) {
+      if (nativeConnections.has(name)) throw new Error(`Connection ${name} already exists`);
+      nativeConnections.add(name);
+      const db = {opens: 0, isOpen: false,
+        async open() { if (this.isOpen) throw new Error('already open'); this.opens++; this.isOpen = true; },
+        async isDBOpen() { return {result: this.isOpen}; }};
+      known.set(name, db);
+      return db;
+    }
+  };
+}
+
+test('a WebView reload reopens the phone garden despite a leftover native connection', async () => {
+  const nativeConnections = new Set();
+  await connectGardenDatabase(fakeSqlitePlugin(nativeConnections));
+  const afterReload = await connectGardenDatabase(fakeSqlitePlugin(nativeConnections));
+  assert.equal((await afterReload.isDBOpen()).result, true);
+});
+
+test('opening the phone garden twice in one page reuses the open connection', async () => {
+  const sqlite = fakeSqlitePlugin(new Set());
+  const first = await connectGardenDatabase(sqlite);
+  const second = await connectGardenDatabase(sqlite);
+  assert.equal(second, first);
+  assert.equal(second.opens, 1);
+});
+
+test('an unnamed plant is rejected with a recognizable validation error', async () => {
+  const db = sqliteAdapter(':memory:');
+  try {
+    const store = await openGardenStore(db);
+    await assert.rejects(store.createPlant({name: '  ', species: '', intervalDays: 7, zone: 'UTC'}),
+      error => error.code === 'invalid-plant');
+    await assert.rejects(store.createPlant({name: 'Fern', species: '', intervalDays: 7, zone: 'Not/AZone'}),
+      error => error.code === 'invalid-plant');
+  } finally { db.close(); }
+});
 
 function sqliteAdapter(file) {
   const sqlite = new DatabaseSync(file);
