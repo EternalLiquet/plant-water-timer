@@ -45,8 +45,17 @@ function showMessage(message, error = false) {
 }
 
 async function start(store) {
+  // One entry per rendered card. "Today" depends on each plant's zone and on the clock, so the
+  // Watered today buttons are recalculated whenever the day might have changed.
+  let wateringCards = [];
+  const canWaterToday = card => !card.saving && card.plant.lastWatered !== localDate(card.plant.zone);
+  function refreshWateringButtons() {
+    for (const card of wateringCards) card.button.disabled = !canWaterToday(card);
+  }
+
   async function render() {
     const plants = await store.listPlants();
+    const renderedCards = [];
     byId('plants').replaceChildren();
     byId('empty').hidden = plants.length > 0;
     byId('care-summary').textContent = `${plants.length} ${plants.length === 1 ? 'plant' : 'plants'} saved on this phone`;
@@ -59,21 +68,28 @@ async function start(store) {
       card.querySelector('img').hidden = true;
       card.querySelector('.edit').hidden = true;
       card.querySelector('.undo').hidden = true;
-      const today = localDate(plant.zone);
       const water = card.querySelector('.water');
+      const wateringCard = {plant, button: water, saving: false};
+      renderedCards.push(wateringCard);
       water.textContent = 'Watered today';
-      water.disabled = plant.lastWatered === today;
+      water.disabled = !canWaterToday(wateringCard);
       water.addEventListener('click', async () => {
+        const date = localDate(plant.zone);
+        wateringCard.saving = true;
         water.disabled = true;
         let result;
         try {
-          result = await store.recordWatering(plant.id, localDate(plant.zone));
+          result = await store.recordWatering(plant.id, date);
         } catch {
           // Same-day waterings are deduplicated, so retrying cannot record this one twice.
           showMessage('I couldn’t confirm the watering was saved. Tap Watered today again; it won’t be counted twice.', true);
-          water.disabled = false;
+          wateringCard.saving = false;
+          water.disabled = !canWaterToday(wateringCard);
           return;
         }
+        // Keeps this card right if the refresh below fails and the day changes later.
+        if (!plant.lastWatered || date > plant.lastWatered) plant.lastWatered = date;
+        wateringCard.saving = false;
         try {
           await render();
           showMessage(result.created ? 'Saved on this phone: watering recorded.' : 'Watering already recorded for today on this phone.');
@@ -97,11 +113,25 @@ async function start(store) {
       });
       byId('plants').append(card);
     }
+    wateringCards = renderedCards;
   }
 
+  // Capacitor fires "resume" when the app returns to the foreground; background JS timers are
+  // paused, so the one-minute check alone would miss a day change while the app was away.
+  document.addEventListener('resume', refreshWateringButtons);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshWateringButtons();
+  });
+  setInterval(refreshWateringButtons, 60_000);
+
+  // Each opening of the add form gets a new number. A save that finishes after its form was
+  // cancelled or reopened reports on the page instead of changing the newer form.
+  let addFormOpening = 0;
   function openAdd() {
+    addFormOpening++;
     byId('form-message').textContent = '';
     byId('plant-form').reset();
+    byId('save-plant').disabled = false;
     byId('add-dialog').showModal();
     byId('plant-name').focus();
   }
@@ -113,24 +143,33 @@ async function start(store) {
   byId('history-close').addEventListener('click', () => byId('history-dialog').close());
   byId('plant-form').addEventListener('submit', async event => {
     event.preventDefault();
+    const opening = addFormOpening;
+    const stillThisForm = () => opening === addFormOpening && byId('add-dialog').open;
     const save = byId('save-plant');
+    const name = byId('plant-name').value.trim();
     save.disabled = true;
     byId('form-message').textContent = '';
     try {
       await store.createPlant({
-        name: byId('plant-name').value,
+        name,
         species: byId('species').value,
         intervalDays: 7,
         zone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
       });
     } catch (error) {
-      byId('form-message').textContent = error.code === 'invalid-plant' ? 'Enter a plant name to continue.' :
-        'I couldn’t confirm this plant was saved. Reopen the app and check the list before trying again.';
-      save.disabled = false;
+      if (stillThisForm()) {
+        byId('form-message').textContent = error.code === 'invalid-plant' ? 'Enter a plant name to continue.' :
+          'I couldn’t confirm this plant was saved. Reopen the app and check the list before trying again.';
+        save.disabled = false;
+      } else if (error.code !== 'invalid-plant') {
+        showMessage(`I couldn’t confirm ${name} was saved. Check your plants before adding it again.`, true);
+      }
       return;
     }
-    byId('add-dialog').close();
-    save.disabled = false;
+    if (stillThisForm()) {
+      byId('add-dialog').close();
+      save.disabled = false;
+    }
     try {
       await render();
       showMessage('Saved on this phone: plant added.');

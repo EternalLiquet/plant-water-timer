@@ -67,15 +67,19 @@ export async function openGardenStore(db) {
   const version = Number((await db.query('PRAGMA user_version;')).values[0]?.user_version ?? 0);
   if (version > 1) throw new Error('This garden was saved by a newer app version.');
   if (version === 0) await transaction(db, () => db.execute(schema, false));
-  let writeQueue = Promise.resolve();
-  function serializeWrite(action) {
-    const result = writeQueue.then(action);
-    writeQueue = result.catch(() => {});
+  // One connection serves every call, so a read issued while a write transaction is open would see
+  // its uncommitted rows. Every operation, reads included, runs in this queue one at a time. Queued
+  // actions use the connection directly and never call back into the store, so they cannot wait
+  // on themselves.
+  let queue = Promise.resolve();
+  function serialized(action) {
+    const result = queue.then(action);
+    queue = result.catch(() => {});
     return result;
   }
   return {
     async createPlant(input) {
-      return serializeWrite(async () => {
+      return serialized(async () => {
         const plant = validatePlant(input);
         const id = crypto.randomUUID();
         await db.run('INSERT INTO plants(id, name, species, interval_days, zone) VALUES (?, ?, ?, ?, ?)',
@@ -84,15 +88,17 @@ export async function openGardenStore(db) {
       });
     },
     async listPlants() {
-      const rows = (await db.query(`SELECT p.id, p.name, p.species, p.interval_days, p.zone,
-        MAX(w.watered_on) AS last_watered FROM plants p LEFT JOIN waterings w ON w.plant_id = p.id
-        GROUP BY p.id ORDER BY p.name COLLATE NOCASE, p.id`)).values;
-      return rows.map(row => ({id: row.id, name: row.name, species: row.species,
-        intervalDays: row.interval_days, zone: row.zone, lastWatered: row.last_watered}));
+      return serialized(async () => {
+        const rows = (await db.query(`SELECT p.id, p.name, p.species, p.interval_days, p.zone,
+          MAX(w.watered_on) AS last_watered FROM plants p LEFT JOIN waterings w ON w.plant_id = p.id
+          GROUP BY p.id ORDER BY p.name COLLATE NOCASE, p.id`)).values;
+        return rows.map(row => ({id: row.id, name: row.name, species: row.species,
+          intervalDays: row.interval_days, zone: row.zone, lastWatered: row.last_watered}));
+      });
     },
     async recordWatering(plantId, date) {
       if (!validDate(date)) throw new Error('Choose a valid watering date.');
-      return serializeWrite(() => transaction(db, async () => {
+      return serialized(() => transaction(db, async () => {
         const plant = (await db.query('SELECT id FROM plants WHERE id = ?', [plantId])).values[0];
         if (!plant) throw new Error('This plant is no longer in this garden.');
         const id = crypto.randomUUID();
@@ -105,8 +111,8 @@ export async function openGardenStore(db) {
       }));
     },
     async listWaterings(plantId) {
-      return (await db.query('SELECT id, watered_on AS date FROM waterings WHERE plant_id = ? ORDER BY watered_on DESC',
-        [plantId])).values;
+      return serialized(async () => (await db.query(
+        'SELECT id, watered_on AS date FROM waterings WHERE plant_id = ? ORDER BY watered_on DESC', [plantId])).values);
     }
   };
 }

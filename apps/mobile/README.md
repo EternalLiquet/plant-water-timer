@@ -19,17 +19,23 @@ use this draft with irreplaceable real care data.
 
 ## Build and test
 
-Use Node 22+, Java 21, Android SDK platform 36 and build tools 35.0.0 and 36.0.0. From the
-repository root:
+Use Node 22.13+ (the store tests use the built-in `node:sqlite`), Java 21, Android SDK platform 36
+and build tools 35.0.0 and 36.0.0. From a clean checkout, at the repository root:
 
 ```sh
-npm ci
+npm ci --ignore-scripts --prefix apps/mobile
+npm ci --ignore-scripts
+npx playwright install chromium
 node --test tests/mobile-offline-care.test.mjs tests/mobile-assets.test.mjs
 npm run test:mobile-shell
 cd apps/mobile
-npm ci --ignore-scripts
 npm run apk:debug
 ```
+
+Install the mobile dependencies first: the asset test builds the bundle with esbuild from
+`apps/mobile/node_modules`. The browser smoke needs Playwright's Chromium. On a fresh Linux machine
+use `npx playwright install --with-deps chromium` to add its system libraries, or set
+`CHROMIUM_PATH` to an existing Chromium and skip the download.
 
 The Android build uses the Capacitor SQLite plugin and bundles the existing garden HTML/CSS
 without the browser app's network script, manifest or service worker. There is no `server.url`.

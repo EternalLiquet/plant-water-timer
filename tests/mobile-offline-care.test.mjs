@@ -60,15 +60,68 @@ function sqliteAdapter(file) {
   const sqlite = new DatabaseSync(file);
   sqlite.exec('PRAGMA foreign_keys = ON');
   return {
+    beforeCommit: null,
     async execute(sql) { sqlite.exec(sql); },
     async run(sql, values = []) { return {changes: {changes: sqlite.prepare(sql).run(...values).changes}}; },
     async query(sql, values = []) { return {values: sqlite.prepare(sql).all(...values)}; },
     async beginTransaction() { sqlite.exec('BEGIN'); },
-    async commitTransaction() { sqlite.exec('COMMIT'); },
+    async commitTransaction() { await this.beforeCommit?.(); sqlite.exec('COMMIT'); },
     async rollbackTransaction() { sqlite.exec('ROLLBACK'); },
     close() { sqlite.close(); }
   };
 }
+
+// Holds a transaction just before COMMIT until the test releases it, or makes the commit fail.
+function commitGate() {
+  let markReached;
+  let release;
+  const reached = new Promise(resolve => { markReached = resolve; });
+  const released = new Promise((resolve, reject) => { release = {commit: resolve, fail: reject}; });
+  return {reached, release, async hold() { markReached(); await released; }};
+}
+
+const nextTurn = () => new Promise(resolve => setImmediate(resolve));
+
+test('reads made during a watering save never show a watering that rolls back', async () => {
+  const db = sqliteAdapter(':memory:');
+  try {
+    const store = await openGardenStore(db);
+    const plant = await store.createPlant({name: 'Fern', species: '', intervalDays: 7, zone: 'UTC'});
+    const gate = commitGate();
+    db.beforeCommit = gate.hold;
+    const watering = store.recordWatering(plant.id, '2026-10-14');
+    await gate.reached;
+    const history = store.listWaterings(plant.id);
+    const plants = store.listPlants();
+    gate.release.fail(new Error('disk full'));
+    await assert.rejects(watering, /disk full/);
+    db.beforeCommit = null;
+    assert.deepEqual(await history, []);
+    assert.equal((await plants)[0].lastWatered, null);
+    assert.equal((await store.recordWatering(plant.id, '2026-10-14')).created, true);
+  } finally { db.close(); }
+});
+
+test('reads made during a watering save wait for it and show it once committed', async () => {
+  const db = sqliteAdapter(':memory:');
+  try {
+    const store = await openGardenStore(db);
+    const plant = await store.createPlant({name: 'Fern', species: '', intervalDays: 7, zone: 'UTC'});
+    const gate = commitGate();
+    db.beforeCommit = gate.hold;
+    const watering = store.recordWatering(plant.id, '2026-10-14');
+    await gate.reached;
+    let historyRead = false;
+    const history = store.listWaterings(plant.id).then(rows => { historyRead = true; return rows; });
+    const plants = store.listPlants();
+    await nextTurn();
+    assert.equal(historyRead, false);
+    gate.release.commit();
+    await watering;
+    assert.deepEqual((await history).map(row => row.date), ['2026-10-14']);
+    assert.equal((await plants)[0].lastWatered, '2026-10-14');
+  } finally { db.close(); }
+});
 
 test('a plant and one watering survive store restart without duplicate same-day events', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'garden-care-'));
