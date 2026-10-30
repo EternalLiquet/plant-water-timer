@@ -19,7 +19,7 @@ use this draft with irreplaceable real care data.
 
 ## Build and test
 
-Use Node 22.13+ (the store tests use the built-in `node:sqlite`), Java 21, Android SDK platform 36
+Use Node 22.13+ (the store tests use the built-in `node:sqlite`), Java 21, Android SDK platform 37 (compile only; target remains 36)
 and build tools 35.0.0 and 36.0.0. From a clean checkout, at the repository root:
 
 ```sh

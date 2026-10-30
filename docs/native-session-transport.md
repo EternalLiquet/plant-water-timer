@@ -1,5 +1,8 @@
 # Native HTTPS session transport proof (#25)
 
+The original proof below is historical. The current request boundary uses the app-owned
+OkHttp client described in [Cookie isolation follow-up](#cookie-isolation-follow-up-2026-10-30).
+
 This local implementation is based on PR #24 head
 `71460d5e1c5efc4522ab019717a8c7e4fe4fd396`. Rebase onto its final merged version before
 integrating with the photo flow. No identification, garden sync, UI connection, backend
@@ -140,3 +143,44 @@ The final local suites pass: 55 Node tests, offline bundled-browser journeys, 20
 TLS/bridge JVM tests, and 71 API tests plus the API build. Independent review found no other
 important defects; Android build/runtime status must be read from the exact-head CI/acceptance
 record, not inferred from these JVM/browser results.
+
+
+## Cookie isolation follow-up (2026-10-30)
+
+Capacitor 8.5.3 installs a WebView-backed global CookieHandler when its cookies plugin
+loads. The original URLConnection adapter therefore rejected normal native startup.
+An explicit Cookie header does not isolate URLConnection from that handler.
+
+With owner approval, both Android and the standalone JVM project strictly pin
+`com.squareup.okhttp3:okhttp:5.5.1`. The app-owned client uses `CookieJar.NO_COOKIES`;
+only the existing private in-memory parser reads Set-Cookie and supplies JSESSIONID.
+It never reads, replaces or writes the global handler or WebView jar. Platform trust
+and hostname verification remain enabled. Tests inject only their generated CA.
+
+Redirects, authenticators, caching, fast fallback and connection retries are disabled.
+POST bodies are one-shot. A per-call network interceptor permits only one HTTP exchange,
+including GET: a failing regression showed that disabling connection retries alone still
+allows a second request for 503 with Retry-After: 0. The guard rejects that follow-up
+before sending it; this is not a promise of only one underlying socket connection.
+Responses remain bounded at 64 KiB, with connect/read/write and overall call timeouts.
+
+Official 5.5.1 Android metadata requires compile SDK 37. Minimum SDK 24 and target SDK 36
+remain unchanged. CI checks for preinstalled SDK 37 and build-tools 35/36; it does not
+install SDK packages or accept agreements. Required transitives come from the official
+published metadata (Okio, Kotlin, AndroidX annotations/startup); the AAR declares only
+the INTERNET permission already present in the app.
+
+References: [official release](https://lysine.dev/okhttp/changelogs/changelog/),
+[Android metadata](https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-android/5.5.1/okhttp-android-5.5.1.pom),
+[JVM metadata](https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-jvm/5.5.1/okhttp-jvm-5.5.1.pom).
+Local fixture compilation uses the published JVM jars, whose downloads matched their
+published SHA-1 sidecars; Gradle/Android resolution is separately checked by hosted CI.
+
+The isolation regression first failed with UNSUPPORTED_COOKIE_CONTEXT, then passed with
+an unrelated handler installed before client construction: login/upload/logout succeed,
+no WebView cookie is sent, neither global cookie callback runs, and subsequent unrelated
+URLConnection requests still use their unchanged handler. The separate replay regression
+first observed two requests, then passed with one. These are real loopback TLS/JVM checks,
+not Android runtime evidence. The production plugin remains unavailable with no endpoint.
+Native TLS/cookie continuity, foreground/process restart and photo instrumentation still
+require disposable Android runtime acceptance before real connectivity or photo transmission.

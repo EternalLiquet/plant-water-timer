@@ -7,6 +7,7 @@ sourceSets.main.java {
     include 'com/eternalliquet/littlegarden/transport/**'
 }
 dependencies {
+    implementation('com.squareup.okhttp3:okhttp:5.5.1') { version { strictly '5.5.1' } }
     // Android supplies org.json at runtime. This compatible implementation is JVM-test-only.
     implementation 'com.vaadin.external.google:android-json:0.0.20131108.vaadin1'
     testImplementation 'junit:junit:4.13.2'
