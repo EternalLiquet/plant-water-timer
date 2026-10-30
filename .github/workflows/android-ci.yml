@@ -44,7 +44,7 @@ jobs:
         run: apps/api/gradlew -p apps/mobile/transport-tests test --no-daemon
       - run: npm run apk:debug
         working-directory: apps/mobile
-      - run: ./gradlew testDebugUnitTest assembleDebugAndroidTest
+      - run: ./gradlew testDebugUnitTest :app:assembleDebugAndroidTest
         working-directory: apps/mobile/android
       - name: Record public APK signing certificate and packaged SQLite plugin
         shell: bash
