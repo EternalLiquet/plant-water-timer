@@ -71,8 +71,17 @@ export async function openGardenStore(db) {
   const version = Number((await db.query('PRAGMA user_version;')).values[0]?.user_version ?? 0);
   if (version > 2) throw new Error('This garden was saved by a newer app version.');
   if (version === 0) await transaction(db, () => db.execute(schema, false));
-  if (version < 2) await transaction(db, () => db.execute(
-    'ALTER TABLE plants ADD COLUMN photo_id TEXT; PRAGMA user_version = 2;', false));
+  if (version < 2) await transaction(db, async () => {
+    // Older Android builds sent ALTER and PRAGMA in one command. The native plugin
+    // executed only ALTER, leaving an otherwise valid photo garden at version 1.
+    const photo = (await db.query('PRAGMA table_info(plants);')).values.find(c => c.name === 'photo_id');
+    if (!photo) await db.execute('ALTER TABLE plants ADD COLUMN photo_id TEXT;', false);
+    else if (photo.type.toUpperCase() !== 'TEXT' || photo.notnull || photo.pk || photo.dflt_value !== null) {
+      throw new Error('This garden has an unrecognized photo column.');
+    }
+    // Native execSQL executes one statement; keep the version update separate and atomic.
+    await db.execute('PRAGMA user_version = 2;', false);
+  });
   // One connection serves every call, so a read issued while a write transaction is open would see
   // its uncommitted rows. Every operation, reads included, runs in this queue one at a time. Queued
   // actions use the connection directly and never call back into the store, so they cannot wait
