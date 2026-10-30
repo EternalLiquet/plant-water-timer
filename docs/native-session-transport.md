@@ -1,5 +1,8 @@
 # Native HTTPS session transport proof (#25)
 
+The original proof below is historical. The current request boundary uses the app-owned
+OkHttp client described in [Cookie isolation follow-up](#cookie-isolation-follow-up-2026-10-30).
+
 This local implementation is based on PR #24 head
 `71460d5e1c5efc4522ab019717a8c7e4fe4fd396`. Rebase onto its final merged version before
 integrating with the photo flow. No identification, garden sync, UI connection, backend
@@ -140,3 +143,53 @@ The final local suites pass: 55 Node tests, offline bundled-browser journeys, 20
 TLS/bridge JVM tests, and 71 API tests plus the API build. Independent review found no other
 important defects; Android build/runtime status must be read from the exact-head CI/acceptance
 record, not inferred from these JVM/browser results.
+
+
+## Cookie isolation follow-up (2026-10-30)
+
+Capacitor 8.5.3 installs a WebView-backed global CookieHandler when its cookies plugin
+loads. The original URLConnection adapter therefore rejected normal native startup.
+An explicit Cookie header does not isolate URLConnection from that handler.
+
+With owner approval, Android and the standalone JVM project strictly pin
+`com.squareup.okhttp3:okhttp:4.12.1`. The app-owned client uses `CookieJar.NO_COOKIES`;
+only the existing private in-memory parser reads Set-Cookie and supplies JSESSIONID.
+It never reads, replaces or writes the global handler or WebView jar. Platform trust
+and hostname verification remain enabled. Tests inject only their generated CA.
+
+Redirects, authenticators, caching and connection retries are disabled. OkHttp 4 has
+no fast-fallback feature. POST bodies are one-shot. A per-call network interceptor
+permits only one HTTP exchange, including GET: a failing regression showed that disabling
+connection retries alone still allows a second request for 503 with Retry-After: 0.
+The guard rejects that follow-up before sending it; this does not promise only one
+underlying socket connection. Responses remain bounded at 64 KiB with connect/read/write
+and overall call timeouts.
+
+### Baseline-compatible maintained dependency
+
+[Upstream supports 4.x until 2028-08-31](https://lysine.dev/okhttp/security/security/).
+[4.12.1, released 2026-10-22](https://lysine.dev/okhttp/changelogs/changelog_4x/),
+includes the same compromised eMudhra intermediate-certificate block as 5.5.1.
+The official Android/JVM JAR supports Android API 21+ and Java 8+, and does not add an AAR
+compile-SDK floor, manifest permissions or initializer. The existing compile/target SDK 36,
+min SDK 24, AGP 8.13.0 and Gradle 8.14.3 are retained. CI checks preinstalled SDK/build tools
+and never installs packages or accepts SDK agreements.
+
+The [published POM](https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp/4.12.1/okhttp-4.12.1.pom)
+selects Okio 3.6.0 and Kotlin stdlib-jdk8 1.8.21. Okio's JVM metadata raises Kotlin to 1.9.10;
+local fixture tests use the resolved Kotlin 1.9.10 jars and annotations 13.0. Downloads
+matched published SHA-1 sidecars. Hosted Gradle separately resolves the complete Android
+application graph, which may already require a newer Kotlin stdlib through AndroidX.
+
+An earlier draft chose 5.5.1 and raised compile SDK 37. Its hosted preflight failed, and
+API 37 also needs a newer build toolchain. That choice has been replaced by maintained 4.12.1;
+no toolchain migration, metadata override or JVM-only variant substitution is used.
+
+The isolation regression first failed with UNSUPPORTED_COOKIE_CONTEXT, then passed with
+an unrelated handler installed before client construction: login/upload/logout succeed,
+no WebView cookie is sent, neither global cookie callback runs, and subsequent unrelated
+URLConnection requests still use their unchanged handler. GET and photo POST 503 checks
+assert one request. These are loopback TLS/JVM checks, not Android runtime evidence.
+The production plugin remains unavailable with no endpoint. Native TLS/cookie continuity,
+foreground/process restart and photo instrumentation still require disposable Android
+runtime acceptance before real connectivity or photo transmission.

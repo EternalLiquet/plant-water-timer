@@ -27,15 +27,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Install pinned Android SDK packages
+      - name: Require preinstalled Android SDK packages
         shell: bash
         run: |
-          SDKMANAGER="$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
-          test -n "$SDKMANAGER"
-          set +o pipefail
-          yes | "$SDKMANAGER" --licenses >/dev/null
-          set -o pipefail
-          "$SDKMANAGER" 'platforms;android-36' 'build-tools;35.0.0' 'build-tools;36.0.0'
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt"
       - run: npm ci --ignore-scripts
         working-directory: apps/mobile
       - run: node --test tests/mobile-assets.test.mjs

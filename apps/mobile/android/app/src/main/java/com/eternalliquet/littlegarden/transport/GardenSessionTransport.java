@@ -4,9 +4,20 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.X509TrustManager;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import okhttp3.Authenticator;
+import okhttp3.ConnectionPool;
+import okhttp3.CookieJar;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okio.BufferedSink;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
@@ -14,7 +25,7 @@ import org.json.JSONTokener;
 public final class GardenSessionTransport implements AutoCloseable {
     public enum Reason { INVALID_ORIGIN, UNCONFIGURED, WRONG_PASSWORD, RATE_LIMITED,
         MALFORMED_RESPONSE, SIGN_IN_REQUIRED, CSRF_REJECTED, UNSAFE_REDIRECT,
-        UNTRUSTED_TLS, NETWORK, UNCERTAIN_OUTCOME, HTTP_ERROR, UNSUPPORTED_COOKIE_CONTEXT, INVALID_PHOTO }
+        UNTRUSTED_TLS, NETWORK, UNCERTAIN_OUTCOME, HTTP_ERROR, INVALID_PHOTO }
     public static final class Failure extends Exception {
         public final Reason reason;
         Failure(Reason reason) { super(reason.name()); this.reason = reason; }
@@ -25,17 +36,18 @@ public final class GardenSessionTransport implements AutoCloseable {
             this.authenticated = authenticated; this.configured = configured;
         }
     }
+    private static final class ExchangeGuard { final AtomicBoolean used = new AtomicBoolean(); }
+    private static final class ReplayBlocked extends IOException { }
     private final URI origin;
-    private final SSLSocketFactory tls;
-    private final int timeout;
+    private final OkHttpClient http;
     private String sessionCookie, csrf;
     private boolean authenticated;
     private static final int MAX_RESPONSE = 65536, MAX_PHOTO = 5 * 1024 * 1024;
 
-    public GardenSessionTransport(URI origin) throws Failure { this(origin, null, 10000); }
+    public GardenSessionTransport(URI origin) throws Failure { this(origin, null, null, 10000); }
 
     // Package-private injection for a synthetic CA fixture; public callers use platform TLS defaults.
-    GardenSessionTransport(URI origin, SSLSocketFactory tls, int timeout) throws Failure {
+    GardenSessionTransport(URI origin, SSLSocketFactory tls, X509TrustManager trust, int timeout) throws Failure {
         if (origin == null || !"https".equalsIgnoreCase(origin.getScheme()) || origin.getHost() == null ||
                 origin.getRawUserInfo() != null || origin.getRawQuery() != null || origin.getRawFragment() != null ||
                 !(origin.getRawPath().isEmpty() || "/".equals(origin.getRawPath())) ||
@@ -43,8 +55,24 @@ public final class GardenSessionTransport implements AutoCloseable {
             throw new Failure(Reason.INVALID_ORIGIN);
         }
         this.origin = origin.resolve("/");
-        this.tls = tls;
-        this.timeout = timeout;
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .addNetworkInterceptor(chain -> {
+                ExchangeGuard guard = chain.request().tag(ExchangeGuard.class);
+                // retryOnConnectionFailure(false) alone does not cover 503 Retry-After: 0.
+                if (guard == null || !guard.used.compareAndSet(false, true)) throw new ReplayBlocked();
+                return chain.proceed(chain.request());
+            })
+            .authenticator(Authenticator.NONE).proxyAuthenticator(Authenticator.NONE)
+            .followRedirects(false).followSslRedirects(false)
+            .retryOnConnectionFailure(false)
+            .protocols(Collections.singletonList(Protocol.HTTP_1_1))
+            .cache(null).connectionPool(new ConnectionPool(0, 1, TimeUnit.SECONDS))
+            .connectTimeout(timeout, TimeUnit.MILLISECONDS).readTimeout(timeout, TimeUnit.MILLISECONDS)
+            .writeTimeout(timeout, TimeUnit.MILLISECONDS).callTimeout(timeout, TimeUnit.MILLISECONDS);
+        // Tests supply their generated CA only. Production retains platform trust/hostname checks.
+        if (tls != null) builder.sslSocketFactory(tls, Objects.requireNonNull(trust));
+        this.http = builder.build();
     }
 
     public synchronized Session session() throws Failure {
@@ -119,7 +147,10 @@ public final class GardenSessionTransport implements AutoCloseable {
     }
 
     /** Drops all local credentials; a new instance/process always requires sign-in again. */
-    @Override public synchronized void close() { sessionCookie = null; csrf = null; authenticated = false; }
+    @Override public synchronized void close() {
+        sessionCookie = null; csrf = null; authenticated = false;
+        http.connectionPool().evictAll();
+    }
 
     private void requireSession() throws Failure {
         if (!authenticated || csrf == null || sessionCookie == null) throw new Failure(Reason.SIGN_IN_REQUIRED);
@@ -197,35 +228,23 @@ public final class GardenSessionTransport implements AutoCloseable {
     }
 
     private Response request(String method, String path, byte[] body, String contentType, boolean mutation) throws Failure {
-        // HttpsURLConnection otherwise consults a process-global jar. Never silently mix cookie owners.
-        if (CookieHandler.getDefault() != null) throw new Failure(Reason.UNSUPPORTED_COOKIE_CONTEXT);
-        HttpsURLConnection connection = null;
-        boolean sending = false;
-        try {
-            connection = (HttpsURLConnection) origin.resolve(path).toURL().openConnection();
-            if (tls != null) connection.setSSLSocketFactory(tls);
-            connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(timeout);
-            connection.setReadTimeout(timeout);
-            connection.setUseCaches(false);
-            connection.setRequestMethod(method);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Connection", "close");
-            if (sessionCookie != null) connection.setRequestProperty("Cookie", sessionCookie);
-            if (mutation) connection.setRequestProperty("X-CSRF-TOKEN", csrf);
-            if (body != null) {
-                connection.setDoOutput(true);
-                connection.setRequestProperty("Content-Type", contentType);
-                // Streaming mode avoids HttpURLConnection buffering/replaying POST on authentication or redirects.
-                connection.setFixedLengthStreamingMode(body.length);
-                sending = true;
-                try (OutputStream output = connection.getOutputStream()) { output.write(body); }
-            }
-            int code = connection.getResponseCode();
-            receiveCookies(connection.getHeaderFields());
+        // No java.net CookieHandler lookup or WebView integration: all cookies are explicit.
+        Request.Builder request = new Request.Builder().url(origin.resolve(path).toString())
+            .tag(ExchangeGuard.class, new ExchangeGuard())
+            .header("Accept", "application/json").header("Accept-Encoding", "identity");
+        if (sessionCookie != null) request.header("Cookie", sessionCookie);
+        if (mutation) request.header("X-CSRF-TOKEN", csrf);
+        RequestBody payload = body == null ? null : new RequestBody() {
+            @Override public MediaType contentType() { return MediaType.get(contentType); }
+            @Override public long contentLength() { return body.length; }
+            @Override public boolean isOneShot() { return true; }
+            @Override public void writeTo(BufferedSink sink) throws IOException { sink.write(body); }
+        };
+        request.method(method, payload);
+        try (okhttp3.Response response = http.newCall(request.build()).execute()) {
+            receiveCookies(response.headers().toMultimap());
             ByteArrayOutputStream output = new ByteArrayOutputStream();
-            InputStream input = code >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            if (input != null) try (InputStream stream = input) {
+            try (InputStream stream = response.body().byteStream()) {
                 byte[] buffer = new byte[4096];
                 int count;
                 while ((count = stream.read(buffer)) != -1) {
@@ -233,9 +252,9 @@ public final class GardenSessionTransport implements AutoCloseable {
                     output.write(buffer, 0, count);
                 }
             }
-            return new Response(code, connection.getContentType(), connection.getHeaderField("Location"), output.toByteArray());
-        } catch (SSLException error) { throw new Failure(Reason.UNTRUSTED_TLS); }
-        catch (IOException error) { throw new Failure(sending ? Reason.UNCERTAIN_OUTCOME : Reason.NETWORK); }
-        finally { if (connection != null) connection.disconnect(); }
+            return new Response(response.code(), response.header("Content-Type"), response.header("Location"), output.toByteArray());
+        } catch (ReplayBlocked error) { throw new Failure(Reason.HTTP_ERROR); }
+        catch (SSLException error) { throw new Failure(Reason.UNTRUSTED_TLS); }
+        catch (IOException error) { throw new Failure(body != null ? Reason.UNCERTAIN_OUTCOME : Reason.NETWORK); }
     }
 }
