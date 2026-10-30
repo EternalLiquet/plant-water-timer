@@ -31,19 +31,19 @@
 
 **Interfaces:** Calls existing `GardenPhotosPlugin.save(PluginCall)` and `read(PluginCall)`; captures resolve/reject only. No production seam or behavior change.
 
-- [ ] Add synthetic JPEG with known colors, orientation, description and GPS; assert fixture metadata first.
-- [ ] Verify real save/read strips metadata and rotates pixels; verify all EXIF orientations.
-- [ ] Verify stored bytes survive a new plugin instance and invalid saves/reads cannot alter existing photo bytes.
-- [ ] Verify packaged CapConfig disables Logger in the actual debug target app.
+- [x] Add synthetic JPEG with known colors, orientation, description and GPS; assert fixture metadata first.
+- [x] Add tests for real save/read metadata removal and pixel rotation across all EXIF orientations (execution pending).
+- [x] Add tests for stable bytes across new plugin instances and invalid operations (execution pending).
+- [x] Add packaged CapConfig/Logger assertion (execution pending).
 - [ ] Compile instrumentation APK and run available existing tests; run instrumentation only on an authorized disposable emulator.
 
 ### Task 2: Maintain executable evidence
 
 **Files:** Modify `.github/workflows/android-ci.yml` and `apps/mobile/README.md`.
 
-- [ ] Add `assembleDebugAndroidTest` to the existing Android Gradle check and retain the instrumentation APK artifact.
-- [ ] Document explicit-serial synthetic-only invocation and distinguish unit/browser/compiled/runtime evidence.
-- [ ] Independently review the exact branch, push and open a draft PR linked to #25.
+- [x] Add `assembleDebugAndroidTest` to the existing Android Gradle check and retain the instrumentation APK artifact.
+- [x] Document explicit-serial synthetic-only invocation and distinguish unit/browser/compiled/runtime evidence.
+- [x] Independently review the branch, push and open draft PR #26 linked to #25.
 
 ## Following slices (not implemented by this validation PR)
 
@@ -55,3 +55,6 @@ Recover and audit saved transport against merged master, then implement a sessio
 - Ruling: this is regression coverage of existing code, not new production behavior; no artificial production change merely to manufacture a red test.
 - Library recovery attempted with current supported helper; network sandbox retry reached Windows xattr failure. Final ZIP absent. Existing saved commit objects also absent from this clone.
 - Prior disposable emulator booted but ADB was unauthorized; do not change authorization to run tests.
+- Local Node suite: 40/40 passed; reviewer independently ran mobile asset tests: 3/3 passed.
+- Review corrected the stripped JPEG orientation assertion: Android synthesizes UNDEFINED (0), not NORMAL (1). No native red/green execution is claimed.
+- Local offline compilation blocked by uncached Android Gradle plugin 8.13.0 and google-services 4.4.4. Hosted Android CI is the compilation gate.

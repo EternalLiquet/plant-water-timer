@@ -138,8 +138,9 @@ public class GardenPhotosRuntimeTest {
         assertNull(exif.getAttribute(ExifInterface.TAG_GPS_LATITUDE));
         assertNull(exif.getAttribute(ExifInterface.TAG_GPS_LONGITUDE));
         assertFalse(exif.getLatLong(new float[2]));
-        assertEquals(ExifInterface.ORIENTATION_NORMAL,
-            exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
+        // Android synthesizes ORIENTATION_UNDEFINED (0) when no orientation tag was copied.
+        assertEquals(ExifInterface.ORIENTATION_UNDEFINED,
+            exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED));
         assertArrayEquals(stored, bytes(new File(root, "garden-photos/" + id + ".jpg")));
     }
 
