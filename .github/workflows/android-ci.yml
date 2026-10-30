@@ -42,13 +42,26 @@ jobs:
       - run: npm test
       - name: Synthetic native HTTPS transport tests
         run: apps/api/gradlew -p apps/mobile/transport-tests test --no-daemon
-      - run: npm run apk:debug
+      - run: node apps/mobile/scripts/build-web.mjs --startup-test
+      - run: node tests/mobile-startup-diagnostic-smoke.cjs
+      - run: npm run apk:startup-test
         working-directory: apps/mobile
       - run: ./gradlew testDebugUnitTest
         working-directory: apps/mobile/android
+      - name: Verify isolated test identity, assets and public signer
+        shell: bash
+        run: |
+          APK=apps/mobile/android/app/build/outputs/apk/startupTest/app-startupTest.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" > /tmp/startup-test-badging.txt
+          grep -F "package: name='com.eternalliquet.littlegarden.startuptest'" /tmp/startup-test-badging.txt
+          grep -F "application-label:'Little Garden Test'" /tmp/startup-test-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
+          sha256sum "$APK"
+          unzip -p "$APK" assets/public/native-shell.js | grep -F 'PR28 baseline 9e5c698'
+          unzip -p "$APK" assets/capacitor.plugins.json
       - uses: actions/upload-artifact@v4
         with:
-          name: little-garden-android-debug-${{ github.event.pull_request.head.sha || github.sha }}
-          path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: little-garden-startup-test-${{ github.event.pull_request.head.sha || github.sha }}
+          path: apps/mobile/android/app/build/outputs/apk/startupTest/app-startupTest.apk
           if-no-files-found: error
           retention-days: 7

@@ -5,6 +5,7 @@
   "scripts": {
     "build:web": "node scripts/build-web.mjs",
     "sync": "npm run build:web && cap sync android",
+    "apk:startup-test": "npm run sync && node scripts/build-web.mjs --startup-test && cd android && ./gradlew :app:assembleStartupTest",
     "apk:debug": "npm run sync && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
