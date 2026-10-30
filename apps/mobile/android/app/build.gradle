@@ -17,6 +17,13 @@ android {
         }
     }
     buildTypes {
+        startupTest {
+            initWith debug
+            applicationIdSuffix ".startuptest"
+            versionNameSuffix "-pr28-startup-test"
+            matchingFallbacks = ['debug']
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

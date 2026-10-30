@@ -172,3 +172,5 @@ apps/mobile/android/app/build/
 apps/mobile/android/local.properties
 apps/mobile/transport-tests/.gradle/
 apps/mobile/transport-tests/build/
+
+apps/mobile/android/app/src/startupTest/assets/
