@@ -63,6 +63,17 @@ without copying EXIF/GPS or the original filename. Files live under private app 
 stores only generated UUID references. The same application ID and signing key are still required
 for data-preserving updates. Uninstall/clear-data still removes photos and care records.
 
+Capacitor logging is disabled with `loggingBehavior: "none"`, including debug APKs. The native
+bridge otherwise logs original photo payloads before the plugin can strip metadata. Keep this
+setting in the source config; `cap copy`/`cap sync` carries it into the generated Android assets.
+The asset regression checks both configurations, including any Android-specific override.
+This also disables Capacitor diagnostic and forwarded console logs; keep user-facing errors useful.
+For a native runtime privacy check, use only a generated JPEG with fake EXIF/GPS markers
+(for example `SYNTHETIC-PHOTO-DO-NOT-LOG`, latitude 1, longitude 2), explicitly save it, and
+inspect Logcat for the original base64 payload as well as the markers. Check orientation,
+metadata removal and persistence after restart separately. A configuration check is not a
+substitute for these device checks.
+
 The photo file is written before the plant reference. A photo write failure leaves the form open
 and never silently saves without it. If the database write then fails ambiguously, keep the file:
 deleting it could remove a photo referenced by a successful but unacknowledged write. Such files

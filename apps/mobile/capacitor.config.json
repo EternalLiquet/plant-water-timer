@@ -1,5 +1,6 @@
 {
   "appId": "com.eternalliquet.littlegarden",
   "appName": "Little Garden",
-  "webDir": "www"
+  "webDir": "www",
+  "loggingBehavior": "none"
 }

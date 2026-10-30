@@ -55,3 +55,17 @@ test('Android asset step bundles the existing UI into an offline shell', () => {
   assert.equal(existsSync(root + 'manifest.webmanifest'), false);
   assert.equal(JSON.parse(config).server, undefined);
 });
+
+test('Android packaging disables bridge payload logging even in debug builds', () => {
+  const config = JSON.parse(readFileSync('apps/mobile/capacitor.config.json', 'utf8'));
+  assert.equal(config.loggingBehavior, 'none');
+  // Android-specific settings take precedence over the shared setting.
+  assert.equal(config.android?.loggingBehavior ?? config.loggingBehavior, 'none');
+  execFileSync(process.execPath, ['scripts/build-web.mjs'], {cwd: 'apps/mobile'});
+  execFileSync(process.execPath, ['node_modules/@capacitor/cli/bin/capacitor', 'copy', 'android'],
+    {cwd: 'apps/mobile'});
+  const packaged = JSON.parse(readFileSync(
+    'apps/mobile/android/app/src/main/assets/capacitor.config.json', 'utf8'));
+  assert.equal(packaged.loggingBehavior, 'none');
+  assert.equal(packaged.android?.loggingBehavior ?? packaged.loggingBehavior, 'none');
+});
