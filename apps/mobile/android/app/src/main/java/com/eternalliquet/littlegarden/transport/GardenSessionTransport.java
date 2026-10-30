@@ -65,7 +65,7 @@ public final class GardenSessionTransport implements AutoCloseable {
             })
             .authenticator(Authenticator.NONE).proxyAuthenticator(Authenticator.NONE)
             .followRedirects(false).followSslRedirects(false)
-            .retryOnConnectionFailure(false).fastFallback(false)
+            .retryOnConnectionFailure(false)
             .protocols(Collections.singletonList(Protocol.HTTP_1_1))
             .cache(null).connectionPool(new ConnectionPool(0, 1, TimeUnit.SECONDS))
             .connectTimeout(timeout, TimeUnit.MILLISECONDS).readTimeout(timeout, TimeUnit.MILLISECONDS)

@@ -247,14 +247,20 @@ public class GardenSessionTransportTest {
         assertEquals(0, landings.get());
     }
 
-    @Test public void disconnectAndTimeoutReportUncertainOutcomeWithoutReplay() throws Exception {
+    @Test public void disconnectReportsUncertainOutcomeWithoutReplay() throws Exception {
         client.login(PASSWORD);
         mode = "disconnect";
         fails(UNCERTAIN_OUTCOME, () -> client.uploadPhoto(new byte[]{1}, "image/jpeg"));
         assertEquals(1, uploads.get());
+    }
+
+    @Test public void timeoutReportsUncertainOutcomeWithoutReplay() throws Exception {
+        // Separate fixture: a failed localhost route can defer IPv4 behind IPv6 in OkHttp4.
+        // This server deliberately binds only IPv4 loopback; exercise an actual read timeout.
+        client.login(PASSWORD);
         mode = "timeout";
         fails(UNCERTAIN_OUTCOME, () -> client.uploadPhoto(new byte[]{1}, "image/jpeg"));
-        assertEquals(2, uploads.get());
+        assertEquals(1, uploads.get());
     }
 
     @Test public void closingClientLosesSessionAndAnotherInstanceDoesNotInheritCookies() throws Exception {

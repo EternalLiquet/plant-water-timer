@@ -6,7 +6,7 @@
 **Architecture:** retain GardenSessionTransport's public API and private cookie/CSRF parsing;
 replace its connection boundary with a private OkHttp client. All calls remain synchronous
 on the existing bridge worker. A one-network-exchange guard prevents library status follow-ups.
-**Tech Stack:** Java 21 tests; Android API 24+; OkHttp 5.5.1 and required transitives.
+**Tech Stack:** Java 21 tests; Android API 24+; OkHttp 4.12.1 and required transitives.
 **Spec:** docs/superpowers/specs/2026-10-30-owned-session-client-design.md
 
 ## Constraints and review focus
@@ -37,7 +37,12 @@ transport-tests/build.gradle; existing native-session-transport.md.
 Execution: base 4031f6d; prior checkpoint remains unchanged. PR27 metadata update succeeded once
 following explicit owner authorization. Workflow-list Forbidden is not retried.
 
-Local validation: 22 real loopback TLS/JVM tests, 55 Node tests and bundled offline browser
+Local validation: 23 real loopback TLS/JVM tests, 55 Node tests and bundled offline browser
 journeys pass. API test/build validates with cached tasks unchanged. Independent review found
 no code blocker; documentation clarified and targeted POST503 coverage added. Hosted Android
 build and final-head artifact remain pending publication. No Android runtime pass is claimed.
+
+Compatibility follow-up: independently reviewed maintained OkHttp 4.12.1 replaces 5.5.1,
+retaining the original SDK/AGP/Gradle baseline and the current certificate-security fix.
+23 loopback tests pass with resolved Kotlin 1.9.10; disconnect/timeout fixtures are independent
+to avoid localhost IPv4/IPv6 route ordering after a deliberate disconnect.
