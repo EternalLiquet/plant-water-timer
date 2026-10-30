@@ -84,3 +84,25 @@ Node tests cover v1 migration rollback and preserved history/references; the off
 uses a synthetic native photo bridge. Java unit tests cover native input limits and reference
 validation. Bitmap encoding, metadata stripping, orientation and native file persistence still need
 Android runtime/device checks; browser tests do not prove those. No device installation is performed.
+
+## Synthetic native photo checks
+
+`GardenPhotosRuntimeTest` exercises the real Android bitmap/EXIF/file implementation with generated
+four-color JPEGs containing fake GPS coordinates (1, 2) and a synthetic description. It checks
+all eight EXIF orientations, metadata removal, stable reads across plugin instances, preservation
+after failed operations, and the packaged Capacitor logger configuration. Its files live in a
+unique test cache directory; it never uses the real garden photo directory or personal images.
+Plugin recreation does not prove persistence across an Android process restart. Existing Node
+tests separately cover SQLite migration/history/reference preservation.
+
+Android CI compiles the instrumentation APK (`:app:assembleDebugAndroidTest`) and publishes it alongside
+the app APK; it does **not** execute these native tests. On an already authorized disposable emulator,
+after building/syncing and selecting its explicit serial, run from `apps/mobile/android`:
+
+```sh
+ANDROID_SERIAL=emulator-5580 ./gradlew :app:connectedDebugAndroidTest
+```
+
+This installs the debug app and test APK on the selected emulator. Never use a phone with real
+garden data for this command. ADB authorization, process-restart persistence and full bridge Logcat
+capture are separate runtime gates. The logger configuration assertion is not a Logcat test.
