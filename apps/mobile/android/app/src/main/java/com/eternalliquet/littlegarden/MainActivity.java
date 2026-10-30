@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(GardenPhotosPlugin.class);
+        registerPlugin(GardenSessionPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

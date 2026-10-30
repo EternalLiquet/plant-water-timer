@@ -43,7 +43,10 @@ test('Android asset step bundles the existing UI into an offline shell', () => {
     'apps/mobile/node_modules/@capacitor-community/sqlite/dist/esm/definitions.js',
     'apps/mobile/node_modules/@capacitor-community/sqlite/dist/esm/index.js',
     'apps/mobile/node_modules/@capacitor-community/sqlite/dist/esm/web.js',
-    'apps/mobile/node_modules/@capacitor/core/dist/index.js'
+    'apps/mobile/node_modules/@capacitor/core/dist/index.js',
+    'apps/mobile/session-adapter.mjs',
+    'apps/mobile/session-state.mjs',
+    'apps/mobile/session-ui.mjs'
   ]);
   for (const [name, code] of modules) {
     // Capacitor core ships an unused web fetch fallback for its HTTP plugin; nothing here calls it.

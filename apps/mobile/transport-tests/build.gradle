@@ -1,0 +1,14 @@
+plugins { id 'java' }
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+repositories { mavenCentral() }
+// Compile the very same transport source packaged by Android, without needing an SDK.
+sourceSets.main.java {
+    srcDirs = ['../android/app/src/main/java']
+    include 'com/eternalliquet/littlegarden/transport/**'
+}
+dependencies {
+    // Android supplies org.json at runtime. This compatible implementation is JVM-test-only.
+    implementation 'com.vaadin.external.google:android-json:0.0.20131108.vaadin1'
+    testImplementation 'junit:junit:4.13.2'
+}
+test { jvmArgs '--add-modules', 'jdk.httpserver' }
