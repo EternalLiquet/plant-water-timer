@@ -58,3 +58,4 @@ Recover and audit saved transport against merged master, then implement a sessio
 - Local Node suite: 40/40 passed; reviewer independently ran mobile asset tests: 3/3 passed.
 - Review corrected the stripped JPEG orientation assertion: Android synthesizes UNDEFINED (0), not NORMAL (1). No native red/green execution is claimed.
 - Local offline compilation blocked by uncached Android Gradle plugin 8.13.0 and google-services 4.4.4. Hosted Android CI is the compilation gate.
+- CI exposed a task-scoping error: the app instrumentation APK compiled, but the unqualified task also assembled unused Cordova library instrumentation and hit its duplicate Kotlin classes. Scope the added task and documented runtime invocation to `:app:`; retain existing unit tests and every app assertion. No dependency changes.

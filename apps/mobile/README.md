@@ -95,12 +95,12 @@ unique test cache directory; it never uses the real garden photo directory or pe
 Plugin recreation does not prove persistence across an Android process restart. Existing Node
 tests separately cover SQLite migration/history/reference preservation.
 
-Android CI compiles the instrumentation APK (`assembleDebugAndroidTest`) and publishes it alongside
+Android CI compiles the instrumentation APK (`:app:assembleDebugAndroidTest`) and publishes it alongside
 the app APK; it does **not** execute these native tests. On an already authorized disposable emulator,
 after building/syncing and selecting its explicit serial, run from `apps/mobile/android`:
 
 ```sh
-ANDROID_SERIAL=emulator-5580 ./gradlew connectedDebugAndroidTest
+ANDROID_SERIAL=emulator-5580 ./gradlew :app:connectedDebugAndroidTest
 ```
 
 This installs the debug app and test APK on the selected emulator. Never use a phone with real
