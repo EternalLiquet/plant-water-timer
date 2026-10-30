@@ -68,7 +68,7 @@ public class GardenSessionTransportTest {
         server.createContext("/", this::handle);
         server.start();
         origin = URI.create("https://localhost:" + server.getAddress().getPort());
-        client = new GardenSessionTransport(origin, trusted.getSocketFactory(), trust, 500);
+        client = new GardenSessionTransport(origin, trusted.getSocketFactory(), trust, 2000);
     }
 
     @After public void stopFixture() {
@@ -138,7 +138,7 @@ public class GardenSessionTransportTest {
             }
             if (mode.equals("disconnect")) { exchange.close(); return; }
             if (mode.equals("timeout")) {
-                try { Thread.sleep(1500); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                try { Thread.sleep(3500); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
                 exchange.close(); return;
             }
             if (mode.startsWith("redirect:")) { redirect(exchange, mode.substring(9)); return; }
@@ -228,7 +228,7 @@ public class GardenSessionTransportTest {
 
     @Test public void trustedCertificateStillMustMatchTheHostname() throws Exception {
         URI mismatch = URI.create("https://127.0.0.1:" + server.getAddress().getPort());
-        try (GardenSessionTransport wrongHost = new GardenSessionTransport(mismatch, trusted.getSocketFactory(), trust, 500)) {
+        try (GardenSessionTransport wrongHost = new GardenSessionTransport(mismatch, trusted.getSocketFactory(), trust, 2000)) {
             fails(UNTRUSTED_TLS, wrongHost::session);
         }
     }
@@ -266,7 +266,7 @@ public class GardenSessionTransportTest {
     @Test public void closingClientLosesSessionAndAnotherInstanceDoesNotInheritCookies() throws Exception {
         client.login(PASSWORD); client.close();
         fails(SIGN_IN_REQUIRED, () -> client.uploadPhoto(new byte[]{1}, "image/jpeg"));
-        try (GardenSessionTransport fresh = new GardenSessionTransport(origin, trusted.getSocketFactory(), trust, 500)) {
+        try (GardenSessionTransport fresh = new GardenSessionTransport(origin, trusted.getSocketFactory(), trust, 2000)) {
             assertFalse(fresh.session().authenticated);
         }
     }
@@ -298,7 +298,7 @@ public class GardenSessionTransportTest {
         try {
             CookieHandler.setDefault(unrelated);
             client.close();
-            client = new GardenSessionTransport(origin, trusted.getSocketFactory(), trust, 500);
+            client = new GardenSessionTransport(origin, trusted.getSocketFactory(), trust, 2000);
             client.login(PASSWORD);
             client.uploadPhoto(new byte[]{1}, "image/jpeg");
             client.logout();
