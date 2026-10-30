@@ -154,3 +154,43 @@ test('failed sign-out remains unconfirmed and is never automatically retried', a
   assert.doesNotMatch(state.getState().message, /private server/);
   assert.equal(calls, 1);
 });
+
+test('anonymous checks after a failed logout never claim the old server session was invalidated', async () => {
+  let checks = 0;
+  const state = createSessionState(transport({
+    async getSession() { checks++; return signedOut; },
+    async signOut() { throw {code: 'offline'}; }
+  }));
+  await state.signIn('synthetic-password');
+  await state.signOut();
+  await state.refresh();
+  assert.equal(state.getState().status, 'signOutUnconfirmed');
+  assert.equal(checks, 0);
+  assert.doesNotMatch(state.getState().message, /Try signing out again/);
+  await state.signIn('');
+  await state.refresh();
+  assert.equal(state.getState().status, 'signOutUnconfirmed');
+  await state.signIn('synthetic-password');
+  assert.equal(state.getState().status, 'signedIn');
+  await state.refresh();
+  assert.equal(state.getState().status, 'expired');
+  assert.equal(checks, 1);
+});
+
+test('expiry during failed logout preserves uncertainty for later anonymous checks', async () => {
+  const logout = deferred();
+  let checks = 0;
+  const state = createSessionState(transport({
+    signOut() { return logout.promise; },
+    async getSession() { checks++; return signedOut; }
+  }));
+  await state.signIn('synthetic-password');
+  const pending = state.signOut();
+  await Promise.resolve();
+  state.expire();
+  logout.reject({code: 'offline'});
+  await pending;
+  await state.refresh();
+  assert.equal(state.getState().status, 'signOutUnconfirmed');
+  assert.equal(checks, 0);
+});

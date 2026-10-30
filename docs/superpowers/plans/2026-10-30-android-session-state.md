@@ -31,15 +31,15 @@
 
 **Interface:** transport `getSession()`, `signIn({password})`, `signOut()`; successful calls return `{authenticated: boolean, configured: boolean}`. The adapter may throw an error with a bounded `code`. No tokens leave the transport. `createSessionState(transport)` returns `getState()`, `refresh()`, `signIn(password)`, `signOut()`, `expire()`.
 
-- [ ] Write tests for initial local-only/no-request state, explicit confirmed login, malformed responses, bounded failures and credential exclusion; observe missing-module failure.
-- [ ] Implement minimal controller with serialized transport operations and generation-based stale-result suppression.
-- [ ] Add adversarial tests for duplicate submissions, sign-out during login, expiry during refresh, and uncertain logout with no retries.
-- [ ] Run targeted and full Node tests; independent review; commit/push draft checkpoint.
+- [x] Write tests for initial local-only/no-request state, explicit confirmed login, malformed responses, bounded failures and credential exclusion; observe missing-module failure.
+- [x] Implement minimal controller with serialized transport operations and generation-based stale-result suppression.
+- [x] Add adversarial tests for duplicate submissions, sign-out during login, expiry during refresh, and uncertain logout with no retries.
+- [x] Run targeted and full Node tests; independent review; commit/push draft checkpoint.
 
 ### Task 2: Integration after supported saved-work recovery
 
-- [ ] Inspect recovered transport and review notes; map exact native methods/results into this controller contract.
-- [ ] Wire session controls beside the local garden, clear password inputs after submission, and test real UI sign-in/expiry/offline journeys with synthetic transport.
+- [x] Inspect recovered transport and review notes; map exact native methods/results into this controller contract.
+- [x] Wire session controls beside the local garden, clear password inputs after submission, and test real UI sign-in/expiry/offline journeys with synthetic transport.
 - [ ] Keep production identification unavailable until native transport/runtime tests pass; then add explicit photo-send UI in its own reviewed slice.
 
 ## Execution record
@@ -49,3 +49,22 @@
 - Sleep/migration checkpoint: controller and 10 synthetic tests implemented; full Node suite 50/50 passed. Independent review and UI wiring remain pending.
 - Preserved native transport arrived through a separate source-code handoff. XML entities decoded to exactly 39,025 bytes with expected SHA-256 `8d5337abd2509a80e29f41cc35eb38ae4979c22d00ae94025589a457fbec2d72`. Verified derivative is retained outside this repo as `../session-source-handoff-verified.patch`; not applied. The original Library ZIP was not materialized on Windows and no metadata guard was bypassed.
 - Next worker: inspect all patch paths, run `git apply --check`, then apply narrowly and run the separate transport JVM tests. Map native `session/login/logout` and bounded enum failures to this controller's `getSession/signIn/signOut` interface. Keep real connectivity gated on Android runtime acceptance.
+
+### Cloud continuation
+
+- Cloud ownership transferred at `04a3dd6`; checkout verified, mobile lockfile dependencies
+  installed, and 50 Node tests passed. Independent controller review found no important defects.
+- Recovered transport patch verified at the exact expected 39,025 bytes/SHA and applied cleanly.
+- Added native boolean-only bridge and unavailable-by-default plugin, JavaScript adapter,
+  and optional session panel. No origin or enable switch; no live connectivity/identification.
+- Adapter and bridge tests failed before implementation, then passed. UI journey failed on
+  missing session controls before implementation, then passed against the actual bundled UI.
+- Updated the asset module allowlist for the three session modules; retained its no-fetch,
+  no-API-route and logging-disabled assertions. All 53 Node tests and offline shell smoke pass.
+- All 19 standalone transport/bridge JVM tests pass by direct Java 21/JUnit invocation;
+  local Gradle resolution and Android runtime limits remain documented in transport notes.
+
+- Final independent review found false logout confirmation after native cookie disposal and
+  contradictory native session flags. Regression tests failed before fixes; final 55 Node,
+  20 JVM and bundled browser checks pass. API test/build passed (71 tests). Real Android
+  runtime acceptance and production connectivity/identification remain pending.

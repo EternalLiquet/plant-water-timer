@@ -233,6 +233,103 @@ async function overlappingPhotoRendersShowOnlyLatestGarden(context) {
   await page.close();
 }
 
+// These replace only the native bridge boundary; the bundled controller/UI are real.
+async function sessionJourney(browser) {
+  const context = await newAppContext(browser);
+  await context.addInitScript(() => {
+    let authenticated = false, hasCookie = false;
+    window.__sessionCalls = [];
+    window.__gardenTestSession = {
+      async availability() { return {available: true}; },
+      async session() {
+        window.__sessionCalls.push('session');
+        if (window.__sessionMode === 'expired') authenticated = false;
+        return {authenticated: authenticated && hasCookie, configured: true};
+      },
+      async login({password}) {
+        window.__sessionCalls.push('login');
+        if (password !== 'synthetic-only') throw {code: 'WRONG_PASSWORD', message: 'private-secret'};
+        if (window.__sessionMode === 'hold') await new Promise(resolve => { window.__finishLogin = resolve; });
+        if (['NETWORK', 'RATE_LIMITED', 'UNCONFIGURED'].includes(window.__sessionMode)) {
+          throw {code: window.__sessionMode, message: 'private-secret'};
+        }
+        authenticated = true; hasCookie = true;
+        return {authenticated, configured: true, csrfToken: 'private-secret'};
+      },
+      async logout() {
+        window.__sessionCalls.push('logout');
+        if (!hasCookie) throw {code: 'SIGN_IN_REQUIRED'};
+        hasCookie = false;
+        if (window.__sessionMode === 'logout-failure') throw {code: 'NETWORK', message: 'private-secret'};
+        authenticated = false;
+        return {authenticated, configured: true};
+      }
+    };
+  });
+  const page = await context.newPage();
+  await page.goto(appUrl);
+  await addPlant(page, 'Session fern');
+  await waterAndWaitForSave(page);
+  await page.locator('#session-options summary').click();
+  assert.deepEqual(await page.evaluate(() => window.__sessionCalls), []);
+  const login = async (password = 'synthetic-only') => {
+    await page.locator('#password').fill(password);
+    await page.locator('#login-submit').click();
+    assert.equal(await page.locator('#password').inputValue(), '');
+  };
+  await login('wrong');
+  await page.waitForFunction(() => /password did not work/.test(document.getElementById('login-message').textContent));
+  for (const [mode, message] of [['NETWORK', 'Could not reach'], ['RATE_LIMITED', 'Too many'], ['UNCONFIGURED', 'has not been set up']]) {
+    await page.evaluate(mode => { window.__sessionMode = mode; }, mode);
+    await login();
+    await page.waitForFunction(message => document.getElementById('login-message').textContent.includes(message), message);
+    assert.equal(await page.locator('#garden').isVisible(), true);
+    assert.equal(await page.locator('.plant-name').textContent(), 'Session fern');
+  }
+  await page.evaluate(() => { window.__sessionMode = ''; });
+  await login();
+  await page.waitForFunction(() => /^Signed in\./.test(document.getElementById('login-message').textContent));
+  await page.evaluate(() => { window.__sessionMode = 'expired'; });
+  await page.locator('#session-check').click();
+  await page.waitForFunction(() => /sign in again/.test(document.getElementById('login-message').textContent));
+  await page.evaluate(() => { window.__sessionMode = ''; });
+  await login();
+  await page.evaluate(() => { window.__sessionMode = 'logout-failure'; });
+  await page.locator('#sign-out').click();
+  await page.waitForFunction(() => /could not confirm server sign-out/.test(document.getElementById('login-message').textContent));
+  assert.equal(await page.locator('#session-check').isDisabled(), true);
+  assert.equal(await page.locator('#sign-out').isVisible(), false);
+  await page.evaluate(() => { window.__sessionMode = ''; });
+  await login();
+  await page.waitForFunction(() => /^Signed in\./.test(document.getElementById('login-message').textContent));
+  await page.locator('#sign-out').click();
+  await page.waitForFunction(() => /^Signed out\./.test(document.getElementById('login-message').textContent));
+  await page.evaluate(() => { window.__sessionMode = 'hold'; });
+  await login();
+  await page.waitForFunction(() => window.__finishLogin);
+  assert.equal(await page.locator('#login-submit').isDisabled(), true);
+  await page.locator('#sign-out').click();
+  await page.evaluate(() => window.__finishLogin());
+  await page.waitForFunction(() => /^Signed out\./.test(document.getElementById('login-message').textContent));
+  assert.deepEqual((await page.evaluate(() => window.__sessionCalls)).slice(-2), ['login', 'logout']);
+  assert.doesNotMatch(await page.locator('body').textContent(), /private-secret|synthetic-only/);
+  await page.locator('.plant .history').click();
+  assert.match(await page.locator('#history-list').textContent(), /Watered/);
+  assert.equal(await page.locator('.plant-name').textContent(), 'Session fern');
+  await context.close();
+}
+
+async function unavailableSessionKeepsLocalCare(context) {
+  const page = await context.newPage();
+  await page.goto(appUrl);
+  await page.locator('#session-options summary').click();
+  await page.waitForFunction(() => /not available in this build/.test(document.getElementById('login-message').textContent));
+  assert.equal(await page.locator('#login-form').isVisible(), false);
+  await addPlant(page, 'Offline fern');
+  assert.equal(await page.locator('.plant-name').textContent(), 'Offline fern');
+  await page.close();
+}
+
 async function main() {
   const browser = await chromium.launch({
     headless: true,
@@ -240,6 +337,8 @@ async function main() {
   });
   try {
     const context = await newAppContext(browser);
+    await unavailableSessionKeepsLocalCare(context);
+    await sessionJourney(browser);
     await overlappingPhotoRendersShowOnlyLatestGarden(context);
     await photoManualJourney(context);
     await careJourney(context);

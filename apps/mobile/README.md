@@ -84,3 +84,20 @@ Node tests cover v1 migration rollback and preserved history/references; the off
 uses a synthetic native photo bridge. Java unit tests cover native input limits and reference
 validation. Bitmap encoding, metadata stripping, orientation and native file persistence still need
 Android runtime/device checks; browser tests do not prove those. No device installation is performed.
+
+### Optional session UI (draft #27)
+
+The phone shell includes an optional sign-in panel backed by the native session controller.
+This build keeps native connectivity disabled: no endpoint is configured, and the panel
+says sign-in is unavailable. Local plants, photos and watering history remain usable.
+Synthetic browser checks cover login, bounded errors, expiry, password clearing, uncertain
+logout and sign-out during pending login. They do not prove Android networking or lifecycle.
+
+The standalone HTTPS fixture suite is separate from Node/Android unit tests:
+
+```sh
+apps/api/gradlew -p apps/mobile/transport-tests test
+```
+
+See `docs/native-session-transport.md` for source provenance and the remaining native
+acceptance gates. Online photo identification is still unavailable; manual naming remains.

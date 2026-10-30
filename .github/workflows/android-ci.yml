@@ -43,6 +43,8 @@ jobs:
       - run: npx playwright install chromium
       - run: npm run test:mobile-shell
       - run: npm test
+      - name: Synthetic native HTTPS transport tests
+        run: apps/api/gradlew -p apps/mobile/transport-tests test --no-daemon
       - run: npm run apk:debug
         working-directory: apps/mobile
       - run: ./gradlew testDebugUnitTest

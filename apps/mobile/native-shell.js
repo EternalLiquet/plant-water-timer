@@ -1,4 +1,5 @@
 import {registerPlugin} from '@capacitor/core';
+import {installSessionUi} from './session-ui.mjs';
 import {openGardenStore, localDate, connectGardenDatabase} from './garden-store.mjs';
 
 const byId = id => document.getElementById(id);
@@ -257,6 +258,7 @@ async function start(store) {
 
 try {
   prepareNativeUi();
+  void installSessionUi(globalThis.__gardenTestSession || registerPlugin('GardenSession'), document);
   await start(globalThis.__gardenTestStore || await openNativeStore());
 } catch (error) {
   console.error('Little Garden could not open the phone garden', error);

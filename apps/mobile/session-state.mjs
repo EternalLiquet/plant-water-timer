@@ -11,7 +11,7 @@ const messages = Object.freeze({
   unconfigured: 'This garden has not been set up for sign-in. You can keep using the garden on this phone.',
   offline: 'Could not reach your garden. Check your connection and try again. Your plants remain on this phone.',
   error: 'The garden returned an unexpected response. You can keep using the garden on this phone.',
-  signOutUnconfirmed: 'I could not confirm server sign-out. Online actions are paused. Try signing out again; your plants remain on this phone.'
+  signOutUnconfirmed: 'I could not confirm server sign-out. Online actions are paused. The server session may still be active. Sign in again to start a new session; your plants remain on this phone.'
 });
 
 const failures = Object.freeze({
@@ -35,9 +35,12 @@ export function createSessionState(transport) {
     if (typeof transport?.[method] !== 'function') throw new TypeError('A session transport is required.');
   }
   let generation = 0;
+  let logoutUncertain = false;
   let tail = Promise.resolve();
   let state;
   function set(status, message = messages[status]) {
+    if (status === 'signOutUnconfirmed') logoutUncertain = true;
+    if (status === 'signedIn') logoutUncertain = false;
     state = Object.freeze({status, message, authenticated: status === 'signedIn',
       busy: ['checking', 'signingIn', 'signingOut'].includes(status)});
     return state;
@@ -52,16 +55,23 @@ export function createSessionState(transport) {
     // No operation is retried here, including a failed or uncertain sign-out.
     tail = tail.then(async () => {
       if (ownGeneration !== generation && kind !== 'logout') return state;
+      if (kind === 'refresh' && logoutUncertain) return set('signOutUnconfirmed');
       try {
         const result = await request();
+        if (kind === 'logout') logoutUncertain = !validSession(result) || result.authenticated;
         if (ownGeneration !== generation) return state;
         if (!validSession(result)) return set(kind === 'logout' ? 'signOutUnconfirmed' : 'error');
-        if (kind === 'logout') return set(result.authenticated ? 'signOutUnconfirmed' : 'signedOut');
+        if (kind === 'logout') {
+          if (result.authenticated) return set('signOutUnconfirmed');
+          logoutUncertain = false;
+          return set('signedOut');
+        }
         if (!result.configured) return set('unconfigured');
         if (result.authenticated) return set('signedIn');
         if (kind === 'refresh' && previousAuthenticated) return set('expired');
         return set('signedOut', kind === 'login' ? 'Sign-in was not confirmed. Please try again.' : messages.signedOut);
       } catch (error) {
+        if (kind === 'logout') logoutUncertain = true;
         if (ownGeneration !== generation) return state;
         if (kind === 'logout') return set('signOutUnconfirmed');
         const [status, message] = Object.hasOwn(failures, error?.code) ? failures[error.code] : ['error', messages.error];
@@ -75,12 +85,16 @@ export function createSessionState(transport) {
     getState: () => state,
     refresh() {
       if (state.busy) return tail;
+      // Native logout forgets its cookie even on failure. An anonymous check cannot
+      // establish that the previous server session was invalidated.
+      if (logoutUncertain) return Promise.resolve(set('signOutUnconfirmed'));
       return run('refresh', () => transport.getSession());
     },
     signIn(password) {
       if (state.busy) return tail;
       if (typeof password !== 'string' || password.length === 0) {
-        return Promise.resolve(set('signedOut', 'Enter your garden password.'));
+        return Promise.resolve(logoutUncertain ? set('signOutUnconfirmed') :
+          set('signedOut', 'Enter your garden password.'));
       }
       return run('login', () => transport.signIn({password}));
     },
